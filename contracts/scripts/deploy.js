@@ -22,6 +22,7 @@ function publicTestAccounts() {
 async function main() {
   const local = LOCAL_NETWORKS.has(hre.network.name);
   const [operator, defaultGuardian] = await hre.ethers.getSigners();
+  if (!operator) throw new Error('Set DEPLOYER_PRIVATE_KEY: there is no account to deploy with');
   const guardian = process.env.GUARDIAN_ADDRESS || (local ? defaultGuardian.address : null);
   if (!guardian || !hre.ethers.isAddress(guardian)) {
     throw new Error('Set GUARDIAN_ADDRESS to the guardian key (a different, offline account or a multisig)');
