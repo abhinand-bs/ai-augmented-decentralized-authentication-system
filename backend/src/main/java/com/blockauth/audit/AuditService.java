@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -36,7 +37,7 @@ public class AuditService {
 	private final TransactionTemplate newTransaction;
 
 	public AuditService(AuthenticationEventRepository authEvents, SecurityEventRepository securityEvents,
-			UserRepository users, Clock clock, PlatformTransactionManager transactionManager) {
+			UserRepository users, Clock clock, @NonNull PlatformTransactionManager transactionManager) {
 		this.authEvents = authEvents;
 		this.securityEvents = securityEvents;
 		this.users = users;
@@ -91,20 +92,20 @@ public class AuditService {
 	}
 
 	/** One user's own events, newest first. */
-	public Page<AuthenticationEvent> historyOf(UUID userId, AuthEventType type, Pageable pageable) {
+	public Page<AuthenticationEvent> historyOf(UUID userId, AuthEventType type, @NonNull Pageable pageable) {
 		return authEvents.findAll(
 				Specs.<AuthenticationEvent>eq("userId", userId).and(Specs.eq("eventType", type)), pageable);
 	}
 
 	public Page<AuthenticationEvent> authenticationEvents(AuthEventType type, AuthEventStatus status, String wallet,
-			Instant from, Instant to, Pageable pageable) {
+			Instant from, Instant to, @NonNull Pageable pageable) {
 		return authEvents.findAll(Specs.<AuthenticationEvent>eq("eventType", type)
 				.and(Specs.eq("eventStatus", status)).and(Specs.eq("walletAddress", wallet))
 				.and(Specs.between("occurredAt", from, to)), pageable);
 	}
 
 	public Page<SecurityEvent> securityEvents(AttackType type, String wallet, Instant from, Instant to,
-			Pageable pageable) {
+			@NonNull Pageable pageable) {
 		return securityEvents.findAll(Specs.<SecurityEvent>eq("attackType", type)
 				.and(Specs.eq("walletAddress", wallet)).and(Specs.between("occurredAt", from, to)), pageable);
 	}

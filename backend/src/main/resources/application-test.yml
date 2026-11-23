@@ -28,3 +28,6 @@ blockauth:
   # Due administrator actions are carried out by the tests themselves, never by the background job.
   admin-actions:
     schedule: "-"
+  # Likewise, the tests run the chain status check themselves.
+  chain-sync:
+    schedule: "-"

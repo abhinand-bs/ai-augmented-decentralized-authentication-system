@@ -29,6 +29,13 @@ spring:
 
 server:
   port: 8080
+  tomcat:
+    remoteip:
+      # Used only when forwarded headers are on (the prod profile, or SERVER_FORWARD_HEADERS_STRATEGY=native
+      # as in Docker Compose). Only these addresses may report the client address in X-Forwarded-For.
+      # Tomcat's default trusts every private network, so anything that reached the port directly from such
+      # a network could choose its own address and escape the per-address limits.
+      internal-proxies: ${TRUSTED_PROXIES:127.0.0.1/32, ::1/128}
   error:
     include-stacktrace: never
     include-message: never

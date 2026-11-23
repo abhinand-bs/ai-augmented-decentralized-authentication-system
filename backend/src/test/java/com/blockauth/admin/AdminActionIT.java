@@ -50,6 +50,14 @@ class AdminActionIT extends IntegrationTest {
 				proof(as, signer, "ACTIVATE_WALLET", target));
 	}
 
+	/** A well-formed proof that no wallet signed: enough to get past request validation. */
+	private static final Map<String, Object> UNSIGNED = Map.of("proof",
+			Map.of("challenge", "not issued", "signature", "0x" + "1".repeat(130)));
+
+	private Api.Response cancel(Api as, TestWallet signer, long id) {
+		return as.post("/api/admin/actions/" + id + "/cancel", proof(as, signer, "CANCEL_ADMIN_ACTION", Map.of("actionId", id)));
+	}
+
 	private String status(long id) {
 		return jdbc.queryForObject("select status from admin_actions where id = ?", String.class, id);
 	}
@@ -97,9 +105,10 @@ class AdminActionIT extends IntegrationTest {
 		register(browser(), user);
 		revoke(user);
 		long id = requestActivation(admin, ADMIN, user).body().get("id").asLong();
-		Api colleague = secondAdmin(new TestWallet());
+		TestWallet colleagueWallet = new TestWallet();
+		Api colleague = secondAdmin(colleagueWallet);
 
-		Api.Response cancelled = colleague.post("/api/admin/actions/" + id + "/cancel", null);
+		Api.Response cancelled = cancel(colleague, colleagueWallet, id);
 
 		assertThat(cancelled.status()).isEqualTo(200);
 		assertThat(cancelled.body().get("status").asString()).isEqualTo("CANCELLED");
@@ -107,11 +116,39 @@ class AdminActionIT extends IntegrationTest {
 		clock.advance(AFTER_DELAY);
 		actions.runDue();
 		assertThat(chain.get(user.address()).active()).isFalse();
-		assertThat(admin.post("/api/admin/actions/" + id + "/cancel", null).code())
+		assertThat(admin.post("/api/admin/actions/" + id + "/cancel", UNSIGNED).code())
 			.isEqualTo("ADMIN_ACTION_NOT_PENDING");
-		assertThat(admin.post("/api/admin/actions/999999/cancel", null).status()).isEqualTo(404);
+		assertThat(admin.post("/api/admin/actions/999999/cancel", UNSIGNED).status()).isEqualTo(404);
 		assertThat(count("select count(*) from authentication_events where event_type = 'ACTION_CANCELLED'"))
 			.isEqualTo(1);
+	}
+
+	@Test
+	void cancellingNeedsAFreshSignatureNamingTheAction() {
+		register(browser(), user);
+		revoke(user);
+		long id = requestActivation(admin, ADMIN, user).body().get("id").asLong();
+		TestWallet other = new TestWallet();
+		register(browser(), other);
+		revoke(other);
+		long otherId = requestActivation(admin, ADMIN, other).body().get("id").asLong();
+		// What a stolen session can produce: challenges, but no signature from the administrator's wallet.
+		Map<String, Object> wrongSigner = proof(admin, new TestWallet(), "CANCEL_ADMIN_ACTION", Map.of("actionId", id));
+		Map<String, Object> otherAction = proof(admin, ADMIN, "CANCEL_ADMIN_ACTION", Map.of("actionId", otherId));
+
+		assertThat(admin.post("/api/admin/actions/" + id + "/cancel", null).code()).isIn("MALFORMED_REQUEST",
+				"VALIDATION_FAILED");
+		assertThat(admin.post("/api/admin/actions/" + id + "/cancel", Map.of()).code()).isEqualTo("VALIDATION_FAILED");
+		assertThat(admin.post("/api/admin/actions/" + id + "/cancel", wrongSigner).code()).isEqualTo("STEP_UP_FAILED");
+		assertThat(admin.post("/api/admin/actions/" + id + "/cancel", otherAction).code()).isEqualTo("STEP_UP_FAILED");
+		assertThat(status(id)).isEqualTo("PENDING");
+		assertThat(status(otherId)).isEqualTo("PENDING");
+
+		Api.Response issued = admin.post("/api/auth/step-up", Map.of("action", "CANCEL_ADMIN_ACTION", "actionId", id));
+		assertThat(issued.body().get("challenge").asString())
+			.contains("Cancel the waiting administrator action number " + id + " (ACTIVATE_WALLET for "
+					+ user.checksumAddress() + ")");
+		assertThat(cancel(admin, ADMIN, id).status()).isEqualTo(200);
 	}
 
 	@Test
@@ -145,7 +182,7 @@ class AdminActionIT extends IntegrationTest {
 		register(browser(), user);
 		revoke(user);
 		long id = requestActivation(admin, ADMIN, user).body().get("id").asLong();
-		doThrow(new BlockAuthException(ErrorCode.BLOCKCHAIN_UNAVAILABLE)).when(registry).activateWallet(anyString());
+		doThrow(new BlockAuthException(ErrorCode.BLOCKCHAIN_UNAVAILABLE)).when(registry).executeActivation(anyString());
 
 		clock.advance(AFTER_DELAY);
 		actions.runDue();
@@ -165,7 +202,7 @@ class AdminActionIT extends IntegrationTest {
 		register(browser(), user);
 		revoke(user);
 		long id = requestActivation(admin, ADMIN, user).body().get("id").asLong();
-		doThrow(new IllegalStateException("unexpected")).when(registry).activateWallet(anyString());
+		doThrow(new IllegalStateException("unexpected")).when(registry).executeActivation(anyString());
 
 		clock.advance(AFTER_DELAY);
 		actions.runDue();
@@ -173,8 +210,7 @@ class AdminActionIT extends IntegrationTest {
 		assertThat(status(id)).isEqualTo("PENDING");
 		assertThat(jdbc.queryForObject("select failure_reason from admin_actions where id = ?", String.class, id))
 			.isEqualTo("INTERNAL_ERROR");
-		assertThat(admin.post("/api/admin/actions/" + id + "/cancel", null).body().get("status").asString())
-			.isEqualTo("CANCELLED");
+		assertThat(cancel(admin, ADMIN, id).body().get("status").asString()).isEqualTo("CANCELLED");
 		stubChain();
 		clock.advance(Duration.ofMinutes(2));
 		actions.runDue();
@@ -188,9 +224,11 @@ class AdminActionIT extends IntegrationTest {
 		revoke(target);
 		long id = requestActivation(admin, ADMIN, target).body().get("id").asLong();
 		clock.advance(AFTER_DELAY);
+		// Obtained after the clock moved: a confirmation expires after two minutes like any challenge.
+		Map<String, Object> signed = proof(admin, ADMIN, "CANCEL_ADMIN_ACTION", Map.of("actionId", id));
 
 		List<Api.Response> cancel = concurrently(List.<Supplier<Api.Response>>of(
-				() -> admin.post("/api/admin/actions/" + id + "/cancel", null), () -> {
+				() -> admin.post("/api/admin/actions/" + id + "/cancel", signed), () -> {
 					actions.runDue();
 					return null;
 				}));

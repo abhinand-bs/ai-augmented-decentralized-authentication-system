@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Set;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.blockauth.audit.AttackType;
@@ -42,12 +43,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
 	}
 
 	@Override
-	protected boolean shouldNotFilter(HttpServletRequest request) {
+	protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
 		return !routedPath(request).startsWith("/api/");
 	}
 
 	@Override
-	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+			@NonNull FilterChain chain)
 			throws ServletException, IOException {
 		String path = routedPath(request);
 		ClientInfo client = ClientInfoResolver.resolve(request);

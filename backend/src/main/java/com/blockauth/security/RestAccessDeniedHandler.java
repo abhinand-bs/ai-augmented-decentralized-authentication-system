@@ -1,7 +1,10 @@
 package com.blockauth.security;
 
 import java.io.IOException;
+import java.util.Set;
+import java.util.UUID;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -9,6 +12,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.stereotype.Component;
 
+import com.blockauth.apikey.ApiKeyPrincipal;
 import com.blockauth.audit.AttackType;
 import com.blockauth.audit.AuditService;
 import com.blockauth.common.ApiErrorWriter;
@@ -21,6 +25,9 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class RestAccessDeniedHandler implements AccessDeniedHandler {
 
+	private static final Set<String> STANDARD_METHODS = Set.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE",
+			"OPTIONS", "TRACE");
+
 	private final AuditService audit;
 	private final ApiErrorWriter errors;
 
@@ -30,24 +37,33 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
 	}
 
 	@Override
-	public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException exception)
+	public void handle(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+			@NonNull AccessDeniedException exception)
 			throws IOException {
 		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-		BlockAuthPrincipal principal = authentication != null
-				&& authentication.getPrincipal() instanceof BlockAuthPrincipal p ? p : null;
+		Object caller = authentication == null ? null : authentication.getPrincipal();
+		BlockAuthPrincipal principal = caller instanceof BlockAuthPrincipal p ? p : null;
+		ApiKeyPrincipal key = caller instanceof ApiKeyPrincipal k ? k : null;
 		String wallet = principal == null ? null : principal.walletAddress();
+		UUID userId = principal != null ? principal.userId() : key != null ? key.ownerId() : null;
 		String ip = ClientInfoResolver.resolve(request).ip();
 
 		if (exception instanceof CsrfException) {
-			audit.recordSecurityEvent(AttackType.CSRF_REJECTED, wallet, principal == null ? null : principal.userId(),
-					ip);
+			audit.recordSecurityEvent(AttackType.CSRF_REJECTED, wallet, userId, ip);
 			errors.write(request, response, ErrorCode.CSRF_INVALID);
 			return;
 		}
+		// A key used outside its scopes is recorded against its owner, naming the key by its id (never its secret).
 		audit.recordSecurityEvent(AttackType.PRIVILEGE_ESCALATION_ATTEMPT,
-				"Target: " + request.getMethod() + " " + protectedArea(RateLimitFilter.routedPath(request)) + ".",
-				wallet, principal == null ? null : principal.userId(), ip);
+				"Target: " + method(request.getMethod()) + " " + protectedArea(RateLimitFilter.routedPath(request)) + "."
+						+ (key == null ? "" : " API key " + key.keyId() + "."),
+				wallet, userId, ip);
 		errors.write(request, response, ErrorCode.ACCESS_DENIED);
+	}
+
+	/** The method as one of the standard names: the request's own text must not reach the stored description. */
+	private static String method(String method) {
+		return STANDARD_METHODS.contains(method) ? method : "another method";
 	}
 
 	/**

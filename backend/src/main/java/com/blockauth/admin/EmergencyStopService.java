@@ -5,6 +5,9 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import org.jspecify.annotations.NonNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -17,6 +20,7 @@ import com.blockauth.auth.StepUpAction;
 import com.blockauth.auth.StepUpDetails;
 import com.blockauth.auth.StepUpProof;
 import com.blockauth.auth.StepUpService;
+import com.blockauth.blockchain.WalletRegistryClient;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.ErrorCode;
 import com.blockauth.security.BlockAuthPrincipal;
@@ -38,17 +42,21 @@ public class EmergencyStopService {
 	public record State(boolean active, boolean blockLogins, String reason, UUID changedBy, Instant changedAt) {
 	}
 
+	private static final Logger log = LoggerFactory.getLogger(EmergencyStopService.class);
 	private static final Pattern REASON = Pattern.compile("^[\\p{L}\\p{N} .,:;!?()'_/-]{3,200}$");
 
 	private final EmergencyStopRepository stops;
 	private final UserSessionRepository sessions;
 	private final StepUpService stepUp;
 	private final AuditService audit;
+	private final WalletRegistryClient registry;
 	private final Clock clock;
 	private final TransactionTemplate transaction;
 
 	public EmergencyStopService(EmergencyStopRepository stops, UserSessionRepository sessions, StepUpService stepUp,
-			AuditService audit, Clock clock, PlatformTransactionManager transactionManager) {
+			AuditService audit, WalletRegistryClient registry, Clock clock,
+			@NonNull PlatformTransactionManager transactionManager) {
+		this.registry = registry;
 		this.stops = stops;
 		this.sessions = sessions;
 		this.stepUp = stepUp;
@@ -105,12 +113,59 @@ public class EmergencyStopService {
 				sessions.endAllForRole(UserRole.USER, SessionEndReason.EMERGENCY_STOP, now);
 			}
 		});
+		// Only once the stop is recorded: a request that lost the race or could not be saved must not leave
+		// the contract paused while BlockAuth shows the stop off, with no lifting request to undo it.
+		pauseOnChain();
 		audit.recordAuthEvent(AuthEventType.EMERGENCY_STOP_ON, AuthEventStatus.SUCCESS, admin.walletAddress(), null,
 				admin.userId(), null, client);
 	}
 
-	/** Carried out by the delayed action that an administrator requested. */
+	/**
+	 * Pauses the contract too, so that the operator key cannot register or reactivate wallets on the chain
+	 * while the stop is on. Switching the stop on must never fail because the chain is unreachable: the
+	 * stop then holds in BlockAuth, and the chain status check pauses the contract once it can.
+	 */
+	public void pauseOnChain() {
+		try {
+			if (!registry.paused()) {
+				registry.pause();
+			}
+		}
+		catch (BlockAuthException e) {
+			log.error("The emergency stop is on, but the contract could not be paused yet: {}", e.code());
+		}
+	}
+
+	/** Starts the contract's waiting period for the unpause, alongside the server's. */
+	void requestUnpauseOnChain() {
+		if (registry.paused() && registry.unpauseReadyAt() == null) {
+			registry.requestUnpause();
+		}
+	}
+
+	void cancelUnpauseOnChain() {
+		if (registry.unpauseReadyAt() != null) {
+			registry.cancelUnpause();
+		}
+	}
+
+	/**
+	 * Carried out by the delayed action that an administrator requested: first the contract, whose own
+	 * waiting period must be over, then BlockAuth.
+	 * @throws BlockAuthException CHAIN_REQUEST_MISSING when the unpause was cancelled on the chain;
+	 * CHAIN_DELAY_PENDING while the contract's delay is not over
+	 */
 	void lift(UUID requestedBy, String requesterWallet) {
+		if (registry.paused()) {
+			Instant readyAt = registry.unpauseReadyAt();
+			if (readyAt == null) {
+				throw new BlockAuthException(ErrorCode.CHAIN_REQUEST_MISSING);
+			}
+			if (readyAt.isAfter(clock.instant())) {
+				throw new BlockAuthException(ErrorCode.CHAIN_DELAY_PENDING);
+			}
+			registry.executeUnpause();
+		}
 		boolean lifted = Boolean.TRUE.equals(transaction.execute(status -> {
 			EmergencyStop stop = stops.lockCurrent().orElseThrow();
 			if (!stop.isActive()) {

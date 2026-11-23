@@ -1,0 +1,75 @@
+{
+ "results": [
+  {
+   "attempt": 1,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 2,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 3,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 4,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 5,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 6,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 7,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 8,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 9,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 10,
+   "status": 401,
+   "retryAfter": null,
+   "code": "INVALID_CHALLENGE"
+  },
+  {
+   "attempt": 11,
+   "status": 429,
+   "retryAfter": "900",
+   "code": "IP_TEMPORARILY_BLOCKED"
+  }
+ ],
+ "challengeAfterBlock": {
+  "status": 429,
+  "retryAfter": "900",
+  "code": "IP_TEMPORARILY_BLOCKED"
+ }
+}

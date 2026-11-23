@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -27,7 +28,7 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
 	@Override
 	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
-	Optional<User> findById(UUID id);
+	@NonNull Optional<User> findById(UUID id);
 
 	@Query("select u.status as status, count(u) as total from User u group by u.status")
 	List<StatusCount> countPerStatus();

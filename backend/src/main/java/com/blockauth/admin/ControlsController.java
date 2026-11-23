@@ -69,9 +69,9 @@ public class ControlsController {
 	}
 
 	@PostMapping("/actions/{id}/cancel")
-	ActionView cancel(@PathVariable Long id, @AuthenticationPrincipal BlockAuthPrincipal admin,
-			HttpServletRequest request) {
-		return actions.cancel(admin, id, ClientInfoResolver.resolve(request));
+	ActionView cancel(@PathVariable Long id, @Valid @RequestBody ProofBody body,
+			@AuthenticationPrincipal BlockAuthPrincipal admin, HttpServletRequest request) {
+		return actions.cancel(admin, id, body.proof(), ClientInfoResolver.resolve(request));
 	}
 
 }

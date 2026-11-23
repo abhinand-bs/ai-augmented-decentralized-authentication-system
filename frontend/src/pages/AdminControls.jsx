@@ -89,8 +89,9 @@ function EmergencyStop({ onChange }) {
       <p className="muted">
         Takes effect at once. While it is on, BlockAuth refuses new registrations, wallet reactivations, second-step
         resets, removing a suspicious flag and new API keys, and optionally new sign-ins by users. Administrators can
-        always sign in and revoking a wallet still works. Lifting it waits like any other access-restoring action. It
-        controls this application only: the contract can still be called directly with the operator key.
+        always sign in and revoking a wallet still works. It also pauses the WalletRegistry contract, so registrations and
+        reactivations are refused on the blockchain too, even when sent directly with the operator key. Lifting it waits
+        like any other access-restoring action, in BlockAuth and on the blockchain.
       </p>
       {state.loading && !state.data && <Spinner label="Loading…" />}
       <ErrorAlert error={state.error} />
@@ -132,6 +133,7 @@ function EmergencyStop({ onChange }) {
 }
 
 function WaitingActions({ version }) {
+  const { user } = useAuth();
   const [status, setStatus] = useState('PENDING');
   const [page, setPage] = useState(0);
   const actions = useApi(`/api/admin/actions${query({ status, page, size: 20 })}`);
@@ -143,7 +145,9 @@ function WaitingActions({ version }) {
   }, [version, reload]);
 
   async function cancel(id) {
-    await run(() => api.post(`/api/admin/actions/${id}/cancel`));
+    await run(async () =>
+      api.post(`/api/admin/actions/${id}/cancel`, await withProof(user.walletAddress, 'CANCEL_ADMIN_ACTION', { actionId: id })),
+    );
     actions.reload();
   }
 
@@ -152,8 +156,8 @@ function WaitingActions({ version }) {
       <h2 id="actions-title">Waiting actions</h2>
       <p className="muted">
         Reactivating a wallet, resetting a second step and lifting the emergency stop wait before the server carries them
-        out. Any administrator can cancel them meanwhile. A request still fails if its requester is no longer an active
-        administrator when the time comes.
+        out. Any administrator can cancel them meanwhile, after signing a confirmation in MetaMask. A request still fails
+        if its requester is no longer an active administrator when the time comes.
       </p>
       <div className="filters">
         <SelectFilter
@@ -342,7 +346,9 @@ function ApiKeys() {
   }
 
   async function revoke() {
-    await run(() => api.post(`/api/admin/api-keys/${revoking.id}/revoke`));
+    await run(async () =>
+      api.post(`/api/admin/api-keys/${revoking.id}/revoke`, await withProof(user.walletAddress, 'REVOKE_API_KEY', { keyId: revoking.id })),
+    );
     setRevoking(null);
     keys.reload();
   }
@@ -426,7 +432,7 @@ function ApiKeys() {
       >
         <p>
           <strong>{revoking?.name}</strong> stops working at once. This cannot be undone: a script that uses it needs a
-          new key.
+          new key. MetaMask then asks you to sign a confirmation naming this key.
         </p>
       </ConfirmDialog>
     </section>

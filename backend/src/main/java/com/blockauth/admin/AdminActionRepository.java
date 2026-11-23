@@ -45,6 +45,13 @@ public interface AdminActionRepository extends JpaRepository<AdminAction, Long>,
 			+ "a.decidedAt = :now where a.id = :id and a.status = com.blockauth.admin.AdminAction.Status.PENDING")
 	int cancel(@Param("id") Long id, @Param("by") UUID by, @Param("now") Instant now);
 
+	/** Whether a request for this action and target (null for the emergency stop) is waiting or running. */
+	@Query("select count(a) > 0 from AdminAction a where a.action = :action "
+			+ "and ((:wallet is null and a.targetWallet is null) or a.targetWallet = :wallet) "
+			+ "and a.status in (com.blockauth.admin.AdminAction.Status.PENDING, "
+			+ "com.blockauth.admin.AdminAction.Status.EXECUTING)")
+	boolean isOpen(@Param("action") AdminAction.Type action, @Param("wallet") String wallet);
+
 	/** Actions a crash left half-done go back to the queue; every action is safe to carry out again. */
 	@Transactional
 	@Modifying

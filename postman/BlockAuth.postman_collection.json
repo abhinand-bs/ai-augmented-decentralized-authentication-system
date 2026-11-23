@@ -3197,6 +3197,10 @@
             "method": "POST",
             "header": [
               {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
                 "key": "X-XSRF-TOKEN",
                 "value": "{{xsrf}}"
               },
@@ -3205,7 +3209,11 @@
                 "value": "BLOCKAUTH_SESSION={{adminSession}}"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/actions/999999999/cancel"
+            "url": "{{baseUrl}}/api/admin/actions/999999999/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"proof\": {\"challenge\": \"not issued\", \"signature\": \"0x1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111\"}}"
+            }
           }
         },
         {

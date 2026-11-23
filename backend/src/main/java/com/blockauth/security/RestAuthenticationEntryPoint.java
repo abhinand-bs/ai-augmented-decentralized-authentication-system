@@ -2,6 +2,7 @@ package com.blockauth.security;
 
 import java.io.IOException;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
@@ -23,7 +24,8 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 	}
 
 	@Override
-	public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception)
+	public void commence(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+			@NonNull AuthenticationException exception)
 			throws IOException {
 		errors.write(request, response, ErrorCode.UNAUTHENTICATED);
 	}

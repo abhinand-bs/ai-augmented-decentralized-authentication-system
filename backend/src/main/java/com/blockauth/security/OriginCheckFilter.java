@@ -2,7 +2,10 @@ package com.blockauth.security;
 
 import java.io.IOException;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.blockauth.audit.AttackType;
@@ -29,14 +32,19 @@ public class OriginCheckFilter extends OncePerRequestFilter {
 	}
 
 	@Override
-	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+			@NonNull FilterChain chain)
 			throws ServletException, IOException {
 		// Browsers always send Origin on cross-site POSTs. An absent header means a non-browser client,
 		// which the CSRF token check still covers.
 		String origin = request.getHeader(HttpHeaders.ORIGIN);
 		if ("POST".equals(request.getMethod()) && origin != null && !origin.equals(appOrigin)) {
-			audit.recordSecurityEvent(AttackType.CSRF_REJECTED, null, null,
-					ClientInfoResolver.resolve(request).ip());
+			// Recorded against the signed-in caller, if any, like a rejection by the CSRF token check.
+			Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+			BlockAuthPrincipal principal = authentication != null
+					&& authentication.getPrincipal() instanceof BlockAuthPrincipal p ? p : null;
+			audit.recordSecurityEvent(AttackType.CSRF_REJECTED, principal == null ? null : principal.walletAddress(),
+					principal == null ? null : principal.userId(), ClientInfoResolver.resolve(request).ip());
 			errors.write(request, response, ErrorCode.CSRF_INVALID);
 			return;
 		}

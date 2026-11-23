@@ -2,6 +2,7 @@ package com.blockauth.config;
 
 import java.time.Clock;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -119,7 +120,7 @@ public class SecurityConfig {
 	private static CsrfTokenRequestHandler headerOnlyCsrfTokenHandler() {
 		return new CsrfTokenRequestAttributeHandler() {
 			@Override
-			public String resolveCsrfTokenValue(HttpServletRequest request, CsrfToken csrfToken) {
+			public String resolveCsrfTokenValue(@NonNull HttpServletRequest request, @NonNull CsrfToken csrfToken) {
 				return request.getHeader(csrfToken.getHeaderName());
 			}
 		};

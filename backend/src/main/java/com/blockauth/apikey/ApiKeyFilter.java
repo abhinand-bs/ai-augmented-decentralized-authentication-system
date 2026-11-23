@@ -3,6 +3,7 @@ package com.blockauth.apikey;
 import java.io.IOException;
 import java.time.Duration;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.dao.DataAccessException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -44,7 +45,8 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 	}
 
 	@Override
-	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+			@NonNull FilterChain chain)
 			throws ServletException, IOException {
 		String token = request.getHeader(HEADER);
 		if (token == null) {

@@ -22,9 +22,10 @@ class SchemaIT extends IntegrationTest {
 	private static final String NONCE = "0123456789abcdef0123456789abcdef";
 
 	@Test
-	void flywayCreatedTheTablesWithTwoMigrations() {
+	void flywayCreatedTheTablesWithItsMigrations() {
 		assertThat(jdbc.queryForList("select script from flyway_schema_history where success order by installed_rank",
-				String.class)).containsExactly("V1__init_schema.sql", "V2__security_features.sql");
+				String.class)).containsExactly("V1__init_schema.sql", "V2__security_features.sql",
+						"V3__unexpected_chain_request.sql");
 		assertThat(jdbc.queryForList("select table_name from information_schema.tables where table_schema = 'public' "
 				+ "and table_name <> 'flyway_schema_history'", String.class)).containsExactlyInAnyOrder("users",
 						"authentication_challenges", "authentication_events", "security_events", "devices",

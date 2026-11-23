@@ -1,0 +1,5 @@
+{
+ "request": "POST /api/auth/verify, same body as the successful login (walletAddress 0xBcd4042DE499D14e55001CcbB24a551F3b954096, same challenge text, same 132-character signature), fresh X-XSRF-TOKEN",
+ "response": {"status": 401, "code": "CHALLENGE_ALREADY_USED", "message": "This authentication challenge has already been used.", "timestamp": "2026-10-24T02:21:39Z", "path": "/api/auth/verify", "errorId": null, "fieldErrors": []},
+ "sameUserSessionAfterwards": "GET /api/users/me -> 200"
+}

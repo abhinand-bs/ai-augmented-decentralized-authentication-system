@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -85,7 +86,7 @@ public class ApiKeyService {
 		return new Created(view(key, admin.walletAddress()), "bak." + key.getId() + "." + secret);
 	}
 
-	public PageResponse<KeyView> list(Pageable pageable) {
+	public PageResponse<KeyView> list(@NonNull Pageable pageable) {
 		Page<ApiKey> page = keys.findAll(pageable);
 		Map<UUID, String> owners = users.findAllById(page.getContent().stream().map(ApiKey::getOwnerId).toList())
 			.stream()
@@ -93,11 +94,13 @@ public class ApiKeyService {
 		return PageResponse.of(page, k -> view(k, owners.get(k.getOwnerId())));
 	}
 
-	/** Any administrator may revoke any key: revoking never grants anything. */
-	public KeyView revoke(BlockAuthPrincipal admin, UUID id, ClientInfo client) {
-		if (!keys.existsById(id)) {
-			throw new BlockAuthException(ErrorCode.RESOURCE_NOT_FOUND);
-		}
+	/**
+	 * Any administrator may revoke any key. Revoking grants nothing, but it can cut off a monitoring script,
+	 * so like every other administrator change it needs a fresh signature naming the key: a stolen session
+	 * alone cannot do it.
+	 */
+	public KeyView revoke(BlockAuthPrincipal admin, UUID id, StepUpProof proof, ClientInfo client) {
+		stepUp.verify(admin, StepUpAction.REVOKE_API_KEY, revokeDetails(id), proof, client);
 		// Conditional update: of concurrent revocations exactly one takes effect and is recorded.
 		if (keys.revoke(id, admin.userId(), clock.instant()) == 1) {
 			audit.recordAuthEvent(AuthEventType.API_KEY_REVOKED, AuthEventStatus.SUCCESS, admin.walletAddress(), null,
@@ -105,6 +108,12 @@ public class ApiKeyService {
 		}
 		ApiKey key = keys.findById(id).orElseThrow();
 		return view(key, users.findById(key.getOwnerId()).map(User::getWalletAddress).orElse(null));
+	}
+
+	/** The text the confirming signature covers: the key's name and id. @throws BlockAuthException RESOURCE_NOT_FOUND */
+	public String revokeDetails(UUID id) {
+		ApiKey key = keys.findById(id).orElseThrow(() -> new BlockAuthException(ErrorCode.RESOURCE_NOT_FOUND));
+		return "'" + key.getName() + "' (" + key.getId() + ")";
 	}
 
 	/**

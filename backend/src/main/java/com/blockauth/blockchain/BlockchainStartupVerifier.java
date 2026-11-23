@@ -1,5 +1,7 @@
 package com.blockauth.blockchain;
 
+import java.time.Duration;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -8,10 +10,12 @@ import org.springframework.stereotype.Component;
 
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.config.BlockAuthProperties;
+import com.blockauth.config.SecuritySettings;
 
 /**
- * Refuses to start against the wrong chain, an address with no contract, or a contract whose admin is
- * not the operator account. An unreachable RPC endpoint is tolerated: chain-dependent requests then
+ * Refuses to start against the wrong chain, an address with no contract, a contract whose operator is
+ * not the operator account, or a contract whose waiting period is longer than ADMIN_ACTION_DELAY (the
+ * backend would then try to carry out reactivations before the contract allows them). An unreachable RPC endpoint is tolerated: chain-dependent requests then
  * fail closed with 503 while DB-backed pages keep working.
  * <p>
  * Runs once all beans exist but before the web server opens its port, so a misconfigured instance
@@ -25,10 +29,13 @@ public class BlockchainStartupVerifier implements SmartInitializingSingleton {
 
 	private final WalletRegistryClient registry;
 	private final long expectedChainId;
+	private final Duration adminActionDelay;
 
-	public BlockchainStartupVerifier(WalletRegistryClient registry, BlockAuthProperties properties) {
+	public BlockchainStartupVerifier(WalletRegistryClient registry, BlockAuthProperties properties,
+			SecuritySettings settings) {
 		this.registry = registry;
 		this.expectedChainId = properties.blockchain().chainId();
+		this.adminActionDelay = settings.adminActionDelay();
 	}
 
 	@Override
@@ -52,11 +59,17 @@ public class BlockchainStartupVerifier implements SmartInitializingSingleton {
 		if (!registry.contractHasCode()) {
 			throw new IllegalStateException("No contract is deployed at CONTRACT_ADDRESS");
 		}
-		if (!registry.contractAdmin().equals(registry.operatorAddress())) {
+		if (!registry.contractOperator().equals(registry.operatorAddress())) {
 			throw new IllegalStateException(
-					"WalletRegistry admin does not match the account of BLOCKCHAIN_OPERATOR_PRIVATE_KEY");
+					"WalletRegistry operator does not match the account of BLOCKCHAIN_OPERATOR_PRIVATE_KEY");
 		}
-		log.info("Blockchain verified: chain {}, WalletRegistry deployed, operator is contract admin", chainId);
+		Duration delay = registry.delay();
+		if (delay.compareTo(adminActionDelay) > 0) {
+			throw new IllegalStateException("WalletRegistry delay (" + delay + ") is longer than ADMIN_ACTION_DELAY ("
+					+ adminActionDelay + "); deploy with a shorter delay or raise ADMIN_ACTION_DELAY");
+		}
+		log.info("Blockchain verified: chain {}, WalletRegistry deployed, operator matches, guardian {}, delay {}",
+				chainId, registry.contractGuardian(), delay);
 	}
 
 }

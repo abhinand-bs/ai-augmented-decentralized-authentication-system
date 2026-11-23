@@ -180,8 +180,10 @@ Server: both answers are yes                    ->  start a session
 What the code confirms:
 
 - The contract keeps, per wallet, a status (`None`, `Active`, `Revoked`) and a registration time.
-- Only the contract's `admin` (set once, when the contract is deployed) can call `registerWallet`,
-  `revokeWallet` and `activateWallet`.
+- Two keys guard it (since 22 October 2026). The **operator** (the backend's key, set at deployment) can
+  register and revoke wallets at once. Giving access back - reactivating a wallet or lifting a pause - must
+  be requested and can only be carried out after the contract's delay; the operator or the separate
+  **guardian** key can cancel it meanwhile. Only the guardian can replace the operator.
 - Each change emits an event (`WalletRegistered`, `WalletRevoked`, `WalletActivated`) that is part of the
   chain's history.
 - A wallet can never go back to "not registered" (contract test "a wallet can never return to the
@@ -368,9 +370,11 @@ through `NamedParameterJdbcTemplate`.
 
 **Backend to blockchain.** Only `blockchain/WalletRegistryClient.java` talks to the chain:
 
-- Reads (`getWalletStatus`, `admin`) are `eth_call` requests and cost nothing.
-- Writes (`registerWallet`, `revokeWallet`, `activateWallet`) are transactions signed with the operator
-  private key and sent with `eth_sendRawTransaction`. The client then waits for the receipt.
+- Reads (`getWalletStatus`, `operator`, `delay`, `activationReadyAt`, `paused`, …) are `eth_call` requests
+  and cost nothing.
+- Writes (`registerWallet`, `revokeWallet`, `requestActivation`, `executeActivation`, the pause calls) are
+  transactions signed with the operator private key and sent with `eth_sendRawTransaction`. The client then
+  waits for the receipt.
 
 **Frontend to MetaMask.** Only `frontend/src/wallet/metamask.js`. `connectWallet()` asks for the account;
 `signMessage()` sends the exact challenge text, hex-encoded, to `personal_sign`.
@@ -798,8 +802,10 @@ section 7; their entries here point there to avoid repeating the same steps.
 - **Purpose / problem:** Restoring access is risky, so it waits and can be cancelled.
 - **Trigger:** **Activate** on Admin → Wallets for a revoked wallet.
 - **Workflow:** fresh signature for `ACTIVATE_WALLET` → `POST /api/admin/wallet/{address}/activate` →
-  `202` with a scheduled action (6.20). When the waiting period ends, the background job sends
-  `activateWallet` on-chain, sets the mirror to `ACTIVE` and records `WALLET_ACTIVATED`.
+  `202` with a scheduled action (6.20). The same request also starts the contract's own waiting period
+  (`requestActivation`). When both have passed, the background job sends `executeActivation`, sets the
+  mirror to `ACTIVE` and records `WALLET_ACTIVATED`. If the request was cancelled on the chain (for example
+  by the guardian), the action fails with `CHAIN_REQUEST_MISSING` instead of waiting forever.
 - **Errors:** `WALLET_ALREADY_ACTIVE`, `WALLET_NOT_FOUND`, `CANNOT_MODIFY_OWN_WALLET`,
   `ADMIN_ACTION_ALREADY_PENDING`, `EMERGENCY_STOP_ACTIVE`.
 - **Status:** Fully implemented. Evidence: `AdminActionIT`.
@@ -859,8 +865,10 @@ section 7; their entries here point there to avoid repeating the same steps.
   `USER` session ends (`EMERGENCY_STOP`).
 - **Lifting:** `POST /api/admin/emergency-stop/lift` creates a delayed `LIFT_EMERGENCY_STOP` action.
 - **Database:** single-row table `emergency_stop` (`CHECK (id = 1)`).
-- **Limitation:** it controls this application only. Whoever holds the operator key can still call the
-  contract directly (stated in the code and the README).
+- **On the chain:** switching the stop on also pauses the contract, so no wallet can be registered or
+  reactivated there either, even directly with the operator key. Lifting waits for the contract's own
+  unpause delay as well. If the chain is unreachable when the stop is switched on, the stop still holds in
+  BlockAuth and the background check pauses the contract once it can.
 - **Status:** Fully implemented. Evidence: `EmergencyStopIT`.
 
 ### 6.24 Read-only API keys
@@ -913,7 +921,8 @@ section 7; their entries here point there to avoid repeating the same steps.
 - **Purpose / problem:** A backend pointed at the wrong chain or contract must not serve requests.
 - **Workflow:** `blockchain/BlockchainStartupVerifier.java` runs before the web server opens its port. It
   stops startup if the chain ID differs from `BLOCKCHAIN_CHAIN_ID`, if there is no code at
-  `CONTRACT_ADDRESS`, or if the contract's `admin` is not the operator key's address. If the node is simply
+  `CONTRACT_ADDRESS`, if the contract's `operator` is not the operator key's address, or if the contract's
+  delay is longer than `ADMIN_ACTION_DELAY`. If the node is simply
   unreachable, startup continues and chain-dependent requests answer `503`.
 - **Health:** `GET /actuator/health` answers `{"status":"UP"}` with no details.
 - **Status:** Fully implemented. (The verifier is disabled in the `test` profile, where the chain client is
@@ -1178,13 +1187,17 @@ new, separate account; no feature moves data from one wallet to another.
 |---|---|
 | `enum Status { None, Active, Revoked }` | The three possible states of a wallet. |
 | `struct WalletRecord { Status status; uint64 registeredAt; }` | One record per wallet (fits in one storage slot). |
-| `address public immutable admin` | Set to the deployer in the constructor; can never change. |
+| `operator`, `guardian` | The backend's key (the deployer) and a separate offline key. Constructor refuses a missing guardian or one equal to the operator. |
+| `uint64 public immutable delay` | Seconds a reactivation or an unpause must wait (600 by default in `deploy.js`). |
+| `paused`, `operatorEpoch` | Whether the registry is paused; a counter that voids old requests when the operator is replaced. |
 | `mapping(address => WalletRecord) private records` | The registry itself. |
-| `registerWallet(address)` | Admin only. Fails for the zero address and for any wallet that was ever registered (`AlreadyRegistered`). Sets `Active` and the time. Emits `WalletRegistered`. |
-| `revokeWallet(address)` | Admin only. Requires `Active`. Sets `Revoked`. Emits `WalletRevoked`. |
-| `activateWallet(address)` | Admin only. Requires `Revoked`. Sets `Active`. Emits `WalletActivated`. |
-| `isRegistered`, `isActive`, `getWalletStatus` | Free read functions (`view`). `getWalletStatus` returns `(registered, active, registeredAt)`. |
-| Custom errors | `NotAdmin`, `ZeroAddress`, `AlreadyRegistered`, `NotRegistered`, `AlreadyRevoked`, `AlreadyActive`. |
+| `registerWallet(address)` | Operator only, not while paused. Fails for the zero address and for any wallet that was ever registered (`AlreadyRegistered`). Sets `Active` and the time. Emits `WalletRegistered`. |
+| `revokeWallet(address)` | Operator or guardian, also while paused. Requires `Active`. Sets `Revoked` and deletes any waiting reactivation. Emits `WalletRevoked`. |
+| `requestActivation` / `executeActivation` / `cancelActivation` | Operator requests (not while paused; wallet must be revoked); after `delay` the operator executes (sets `Active`, emits `WalletActivated`); operator or guardian can cancel. |
+| `pause` / `requestUnpause` / `executeUnpause` / `cancelUnpause` | Either key pauses at once; unpausing is requested by the operator, waits `delay`, then is executed; either key can cancel. |
+| `setOperator` / `setGuardian` | Guardian only. Replacing the operator voids every request it left waiting. |
+| `isRegistered`, `isActive`, `getWalletStatus`, `activationReadyAt`, `unpauseReadyAt` | Free read functions (`view`). |
+| Custom errors | `NotOperator`, `NotGuardian`, `NotOperatorOrGuardian`, `ZeroAddress`, `SameKey`, `InvalidDelay`, `AlreadyRegistered`, `NotRegistered`, `AlreadyRevoked`, `AlreadyActive`, `RegistryPaused`, `NotPaused`, `AlreadyRequested`, `NotRequested`, `TooEarly`. |
 
 The contract has no `payable` functions, no `receive` or `fallback` function and makes no calls to other
 contracts. Its test "holds no funds: plain transfers and unknown calls are rejected" confirms that sending
@@ -1193,7 +1206,8 @@ ETH to it fails.
 ### 8.3 Deployment
 
 `contracts/scripts/deploy.js` deploys the contract with the first Hardhat account (Account #0), which
-becomes the contract's `admin`. It prints the address and writes
+becomes the contract's `operator`. The guardian is `GUARDIAN_ADDRESS` (default: Account #1) and the delay
+`REGISTRY_DELAY_SECONDS` (default 600). `contracts/scripts/guardian.js` runs the guardian's actions. It prints the address and writes
 `contracts/deployments/<network>.json` (git-ignored). The README tells the developer to copy Account #0's
 private key into `BLOCKCHAIN_OPERATOR_PRIVATE_KEY` and the printed address into `CONTRACT_ADDRESS`.
 Hardhat's printed keys are public test keys; they must only be used on the local chain.
@@ -1206,7 +1220,8 @@ All calls are in `backend/src/main/java/com/blockauth/blockchain/WalletRegistryC
 from the operator address. An RPC error, or an empty answer (no contract at the address), becomes `503
 BLOCKCHAIN_UNAVAILABLE`.
 
-**Writes** (`registerWallet`, `revokeWallet`, `activateWallet`), in this order:
+**Writes** (`registerWallet`, `revokeWallet`, `requestActivation`, `executeActivation`, `cancelActivation`
+and the pause calls), in this order:
 
 1. `eth_estimateGas`. An error here means the contract would revert (for example, the wallet is already in
    the target state) → `502 BLOCKCHAIN_TX_FAILED`, and nothing is sent.
@@ -1238,6 +1253,10 @@ No personal data, IP address or secret is written to the chain.
 - **Login:** reads `getWalletStatus`; only `registered && active` can continue.
 - **Session checks:** the chain is **not** read on every request. The database mirror (`users.status`) is
   read instead, and it is updated by revocation and corrected on every chain read.
+- **Background chain check:** every 15 seconds `session/ChainStatusReconciler.java` reads the chain for each
+  wallet that has an open session, corrects the mirror, and ends the sessions of any wallet that is no
+  longer registered and active (end reason `WALLET_REVOKED`, event `SESSION_TERMINATED`). If the chain
+  cannot be read, it changes nothing and tries again on the next run.
 - **Admin:** revocation writes at once; reactivation writes after the delay.
 
 ### 8.7 Signatures, hashes and addresses
@@ -1261,15 +1280,18 @@ No personal data, IP address or secret is written to the chain.
 
 ### 8.9 Limitations and risks of the design
 
-- **One key controls everything.** The operator private key is the contract's permanent admin. If it
-  leaks, an attacker can register, revoke or reactivate any wallet. There is no multi-signature, no key
-  rotation (the `admin` is `immutable`) and no on-chain delay.
-- **Application-level safeguards only.** The emergency stop and the waiting period are enforced by the
-  backend, not by the contract.
+- **A stolen operator key (reduced since 22 October 2026).** It can no longer restore access at once or
+  lift a pause at once, and the guardian can replace it. It can still revoke any wallet at once and register
+  wallets while the contract is not paused. The backend cancels requests it did not make (every 15 seconds,
+  `ChainRequestGuard`), but only while it runs. Whoever holds both keys controls the registry.
+- **The guardian must be kept separate.** On the local chain it is a public Hardhat test key. A real
+  deployment needs an offline key or a multisignature wallet. The contract has not been audited.
 - **The chain is not durable here.** The local node loses its state on restart, and the database then
   disagrees with the chain (README Troubleshooting explains the manual reset).
-- **The mirror can lag.** If the chain is changed outside the application, the database mirror is only
-  corrected on the next chain read for that wallet. Until then, an open session keeps working.
+- **The mirror can lag briefly.** If the chain is changed outside the application, an open session keeps
+  working until the next background chain check, up to about 15 seconds (8.6). New sign-ins read the chain
+  and are refused at once. A wallet without an open session keeps a stale mirror (shown in the admin list)
+  until something reads its status.
 
 ---
 
@@ -1440,10 +1462,10 @@ All require `USER` or `ADMIN` and act on the caller's own data only.
 | `POST /api/admin/emergency-stop/activate` | `ADMIN` | `{ reason, blockLogins, endUserSessions, proof }` | `200` new state |
 | `POST /api/admin/emergency-stop/lift` | `ADMIN` | `{ proof }` | `202` delayed action |
 | `GET /api/admin/actions` | `ADMIN` | `status`, paging | page of actions |
-| `POST /api/admin/actions/{id}/cancel` | `ADMIN` | — | `200` cancelled action |
+| `POST /api/admin/actions/{id}/cancel` | `ADMIN` | `{ proof }` (since 22 October 2026) | `200` cancelled action |
 | `GET /api/admin/api-keys` | `ADMIN` | paging | page of keys (no secrets) |
 | `POST /api/admin/api-keys` | `ADMIN` | `{ name, scopes, days, proof }` | `201 { key, token }` (token shown once) |
-| `POST /api/admin/api-keys/{id}/revoke` | `ADMIN` | — | `200` key |
+| `POST /api/admin/api-keys/{id}/revoke` | `ADMIN` | `{ proof }` (since 22 October 2026) | `200` key |
 
 ### 10.5 Important backend modules and functions
 
@@ -1456,7 +1478,7 @@ All require `USER` or `ADMIN` and act on the caller's own data only.
 | `LoginService.login` / `completeSecondStep` | signed challenge or code → user or "second step owed" | The whole sign-in decision |
 | `SessionService.establish` / `logout` | user, device → session | Session creation and destruction |
 | `UserService.walletState` | wallet → chain status + user row | Reads the chain and repairs the mirror |
-| `WalletRegistryClient.getWalletStatus` / `registerWallet` / `revokeWallet` / `activateWallet` | wallet → status or transaction hash | The only blockchain access |
+| `WalletRegistryClient.getWalletStatus` / `registerWallet` / `revokeWallet` / `requestActivation` / `executeActivation` / pause calls | wallet → status or transaction hash | The only blockchain access |
 | `TrustPolicy.score` / `decide` | signals → score and decision | Pure, testable trust rules |
 | `StepUpService.issue` / `verify` | action, parameters, proof → nothing or error | Fresh signatures |
 | `SecondStepService.verifyCode` | user, code → true or false | TOTP or backup code, each usable once |
@@ -1517,7 +1539,8 @@ Fill in `.env.local` (all names and their purpose are in the README's "Environme
 - `APP_ORIGIN`: `http://localhost:5173`.
 - `SECOND_STEP_ENCRYPTION_KEY`: 32 random bytes in Base64 (for example `openssl rand -base64 32`).
 - Optional: `CHALLENGE_TTL_SECONDS` (60–600), `SESSION_TIMEOUT`, `SESSION_COOKIE_SECURE` (`false` on plain
-  `http://localhost`), `TRUSTED_DEVICE_DAYS`, `ADMIN_ACTION_DELAY`, `SPRING_PROFILES_ACTIVE`.
+  `http://localhost`), `TRUSTED_DEVICE_DAYS`, `ADMIN_ACTION_DELAY`, `SPRING_PROFILES_ACTIVE`,
+  `TRUSTED_PROXIES` (`prod` only).
 
 The backend reads `.env.local` from the repository root or the `backend` folder
 (`spring.config.import` in `application.yml`). Real environment variables override it.
@@ -1665,7 +1688,8 @@ Each mechanism lists what it protects, how it works here, and its limits.
   - fresh signatures bound to the action, its parameters and the session (6.15);
   - delayed, cancellable access-granting actions (6.20);
   - the emergency stop (6.23).
-- **Limits:** all three are enforced by the backend only; the operator key can bypass them on-chain.
+- **Limits:** reactivations and the stop are also enforced by the contract (delay and pause); the
+  second-step reset is off-chain only. See 8.9 for what a stolen operator key can still do.
 
 ### 12.7 Second step and trust score
 
@@ -1700,7 +1724,9 @@ Each mechanism lists what it protects, how it works here, and its limits.
     headers. The Docker Compose stack puts the backend behind nginx and sets
     `SESSION_COOKIE_SECURE: "false"` for plain `http://localhost:3000`, which suggests it runs without
     `prod` (the `prod` profile forces `Secure` cookies). Without `prod`, the backend sees nginx's address
-    for every user, and they all share one set of limits (see 14).
+    for every user, and they all share one set of limits (see 14);
+  - with `prod`, only the proxies listed in `TRUSTED_PROXIES` (default: this machine) may report the client
+    address. Before 2026-10-21 Tomcat's default list was used, which trusts every private network.
 
 ### 12.9 Input validation and size limits
 
@@ -1756,7 +1782,7 @@ Tested in `FailClosedFiltersTest` and the trust tests.
 
 - **How:** admin-only mutators, zero-address checks, no Ether handling, no external calls, explicit state
   rules, custom errors.
-- **Limits:** a single immutable admin (8.9).
+- **Limits:** two keys (operator and guardian) with an on-chain delay for access grants; see 8.9.
 
 ### 12.15 Audit trail
 
@@ -1795,8 +1821,8 @@ say how the team ran into it).
   failure finishes the job ("Registration is incomplete" in README Troubleshooting).
   `UserService.walletState` repairs the mirror on every chain read. `STATE_CONFLICT` stops a chain reset
   from re-activating a revoked wallet.
-- **Status:** resolved for the cases above. Changes made on-chain outside the app are only picked up on the
-  next chain read (8.9).
+- **Status:** resolved for the cases above. Changes made on-chain outside the app reach open sessions
+  within about 15 seconds through the background chain check added on 2026-10-21 (8.6, `AttackCheck.md`).
 
 ### 13.3 Concurrent blockchain transactions — design challenge, resolved
 
@@ -1813,8 +1839,10 @@ say how the team ran into it).
 - **Where:** a 30-second receipt timeout gives `504 BLOCKCHAIN_TIMEOUT`. The code comments that the
   transaction "can still be mined later" and records a `FAILURE` event naming the administrator. Delayed
   actions retry temporary failures after 1 minute.
-- **Status:** partially resolved. A revocation that is mined after the timeout leaves the database mirror
-  unchanged until the next chain read for that wallet.
+- **Status:** resolved for open sessions since 2026-10-21. Before that, a revocation mined after the
+  timeout left the mirror unchanged and the revoked wallet's session open until something read the chain.
+  The background chain check now ends such sessions within about 15 seconds (test
+  `ChainStatusReconcilerIT.aRevocationMinedAfterTheTimeoutStillEndsTheSession`).
 
 ### 13.5 One-time challenges under concurrency — design challenge, resolved
 
@@ -1884,13 +1912,13 @@ technical challenges only.
 |---|---|---|---|---|
 | 1 | Single backend instance: sessions, rate-limit counters and pending second steps are in memory | Cannot scale out or survive restarts | A restart signs everyone out and clears limits; two instances would not share state | No (documented in the README) |
 | 2 | Local Hardhat chain only (chain ID 31337) | No real decentralization or durability | Restarting the node loses all on-chain data | Manual redeploy and data reset (README) |
-| 3 | One operator key is the contract's permanent admin | Single point of compromise | A leaked key lets an attacker change any wallet's status, bypassing all app-level safeguards | No (stated in the README) |
+| 3 | The operator key can still revoke and (when not paused) register at once | A leaked key allows a denial of service | Wallets can be revoked until the guardian replaces the key; access cannot be restored at once | Guardian key; on-chain delay and pause; backend cancels unexpected requests |
 | 4 | No recovery for a lost wallet key | Users can lose access for good | A new wallet means a new, separate account | No |
 | 5 | MetaMask in desktop Chrome required | Excludes mobile and other wallets | Mobile is not supported (README) | No |
 | 6 | Sign-in alerts in the app only | A user who is not signed in sees nothing | Alerts may be noticed late | No |
 | 7 | Trust score uses fixed, untuned rules | Too strict or too lenient in real use | Medium-risk sign-ins without a second step are allowed | Second step is optional; thresholds are configurable |
 | 8 | Rate limits per IP address; in the Docker stack (without the `prod` profile) the backend sees nginx's address | Users behind one address share limits | In Docker, one user's failures can block sign-ins for everyone; behind NAT, many users share a limit | `prod` profile with a trusted HTTPS proxy (not set up in Compose) |
-| 9 | Database mirror is not re-read from the chain on every request | Off-app chain changes are seen late | An open session survives a revocation made directly on-chain until the next chain read | Every chain read repairs the mirror |
+| 9 | Database mirror is not re-read from the chain on every request | Off-app chain changes are seen late | An open session survives a revocation made directly on-chain for up to about 15 seconds | Background chain check every 15 seconds; every chain read repairs the mirror |
 | 10 | No data deletion or retention | Privacy and growth | IP addresses and user agents stay forever; no "delete my account" | Only challenges are cleaned up |
 | 11 | No role management | Promoting a user needs a database edit | Admins are fixed at registration | Manual (README) |
 | 12 | Frontend has no automated tests or lint | UI regressions are found by hand | Only the production build checks the frontend | No |
@@ -1910,7 +1938,7 @@ risks that follow from the design. Whether they were exploited or observed in pr
 
 | Kind | Location | What it covers |
 |---|---|---|
-| Contract tests (Mocha/Chai via Hardhat) | `contracts/test/WalletRegistry.test.js` | 15 tests: admin rights, register/revoke/activate rules, zero address, events, independent records, no funds, exact interface, no return to unregistered, constant gas |
+| Contract tests (Mocha/Chai via Hardhat) | `contracts/test/WalletRegistry.test.js` | 21 tests: operator and guardian rights, register/revoke rules, delayed reactivation and its cancellation, pause and delayed unpause, a stolen operator key replaced by the guardian, zero address, events, independent records, no funds, exact interface, no return to unregistered, constant gas |
 | Backend unit tests (`*Test`, Surefire) | `backend/src/test/java/…` | Signature verification, EIP-4361 format, challenge service, address validation, tokens, TOTP, AES-GCM, trust policy and service, rate limiter, fail-closed filters, settings validation, exception mapping, user and admin services |
 | Backend integration tests (`*IT`, Failsafe) | same folder | The real application over HTTP with real wallet signatures against a separate PostgreSQL database (Neon `test` branch), chain client mocked: registration, login, logout, step-up, second step, sessions, alerts, revocation, delayed actions, emergency stop, statistics, API keys, trust score, CSRF, rate limits, authorization matrix, error format, schema, challenge cleanup and concurrency, history scoping |
 | Chain integration test | `blockchain/WalletRegistryClientIT.java` (tag `blockchain`) | `WalletRegistryClient` against a real Hardhat node; runs only with `-Pblockchain-it` |
@@ -1925,9 +1953,13 @@ risks that follow from the design. Whether they were exploited or observed in pr
 | Contract tests | `cd contracts; npx hardhat test` | **15 passing** |
 | Backend unit tests | `cd backend; .\mvnw.cmd test` | **184 run, 0 failures, 0 errors, 0 skipped** |
 | Backend unit + integration tests | `cd backend; .\mvnw.cmd verify` (Neon `test` branch; chain tests excluded) | **Succeeded:** 184 unit tests and **172 integration tests run, 0 failures, 0 errors, 0 skipped** |
+| Re-run after the attack check (21–22 October 2026) | `cd backend; .\mvnw.cmd clean verify -Pblockchain-it` | **Succeeded:** 184 unit tests and 183 integration tests (including 10 against a real local Hardhat node), 0 failures; see `AttackCheck.md` |
 | Frontend production build | `cd frontend; npm run build` | **Succeeded** (JavaScript 326.90 kB, 99.72 kB gzip; CSS 12.94 kB) |
+| Re-run on 24 October 2026 | `npx hardhat test`; `.\mvnw.cmd clean verify -Pblockchain-it`; `npm run build` | **Succeeded:** 21 contract tests; 189 unit and 192 integration tests, 0 failures; build succeeded |
+| Postman collection, 24 October 2026 | `npx --yes newman@6 run postman/BlockAuth.postman_collection.json` against the local stack (Neon `test` branch), with USER and ADMIN sessions from real signed logins | **0 of 222 assertions failed** (86 requests) |
+| Real MetaMask, 24 October 2026 | Chrome with the MetaMask extension, two of the owner's accounts, local chain, Neon `test` branch | Registration and login of an ADMIN and a USER, refused admin requests for the USER, signing out on an account switch in both directions, a rejected signature, revoke and the delayed reactivation, each checked against the chain |
 
-Not run for this document:
+Not run for this document (19 October; the Postman collection was run on 24 October, see above):
 
 - the `-Pblockchain-it` chain tests (they need a running Hardhat node with the contract deployed);
 - the Postman collection (it needs a running stack and session cookies);
@@ -1936,7 +1968,7 @@ Not run for this document:
 ### 15.3 What lacks tests
 
 - The frontend has no unit, component or end-to-end tests.
-- No automated test uses the real MetaMask extension.
+- No automated test uses the real MetaMask extension; it was checked by hand on 24 October (15.2).
 - Scheduled jobs are tested by calling them directly; the 15-second schedule itself is switched off in
   tests.
 - No load or performance tests are in the repository.
@@ -1989,8 +2021,8 @@ Details the README leaves out (omissions, not errors):
 - Behaviour on a public Ethereum network (fees, slow confirmations, reorganisations) is untested.
 - In the Docker Compose stack, per-IP rate limits apply to nginx's address for all users (12.8). This
   follows from the configuration but no test in the repository covers it.
-- A revocation transaction mined after the 30-second timeout leaves the database mirror stale until the
-  next chain read (13.4).
+- A revocation transaction mined after the 30-second timeout leaves the mirror stale for wallets without an
+  open session until their status is read again; open sessions end within about 15 seconds (13.4).
 
 ### 16.4 Missing information
 

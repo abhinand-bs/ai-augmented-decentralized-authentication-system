@@ -3,6 +3,7 @@ package com.blockauth.user;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -37,7 +38,7 @@ public class UserService {
 		return users.findById(id).orElseThrow(() -> new BlockAuthException(ErrorCode.SESSION_REVOKED));
 	}
 
-	public Page<User> list(UserStatus status, UserRole role, String wallet, Pageable pageable) {
+	public Page<User> list(UserStatus status, UserRole role, String wallet, @NonNull Pageable pageable) {
 		return users.findAll(Specs.<User>eq("status", status).and(Specs.eq("role", role))
 				.and(Specs.eq("walletAddress", wallet)), pageable);
 	}

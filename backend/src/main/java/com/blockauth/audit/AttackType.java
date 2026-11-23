@@ -19,7 +19,8 @@ public enum AttackType {
 	SECOND_STEP_FAILED("A wrong verification code was entered during sign-in."),
 	STEP_UP_FAILED("A dangerous action was submitted without a valid confirmation signature."),
 	LOW_TRUST_LOGIN("A sign-in was refused because its trust score was too low."),
-	INVALID_API_KEY("A request carried a missing, invalid, expired or revoked API key.");
+	INVALID_API_KEY("A request carried a missing, invalid, expired or revoked API key."),
+	UNEXPECTED_CHAIN_REQUEST("The blockchain held a reactivation or unpause request that BlockAuth did not make; it was cancelled.");
 
 	private final String description;
 

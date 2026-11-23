@@ -2,16 +2,20 @@ package com.blockauth.auth;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.blockauth.admin.AdminActionService;
+import com.blockauth.apikey.ApiKeyService;
 import com.blockauth.apikey.ApiKeySpec;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.WalletAddresses;
@@ -33,7 +37,8 @@ public class StepUpController {
 	 * on the action. They must be sent again, unchanged, with the action itself.
 	 */
 	public record StepUpRequest(@NotNull(message = "is required") StepUpAction action, String walletAddress,
-			Boolean blockLogins, Boolean endUserSessions, String name, List<String> scopes, Integer days) {
+			Boolean blockLogins, Boolean endUserSessions, String name, List<String> scopes, Integer days, Long actionId,
+			UUID keyId) {
 	}
 
 	public record StepUpChallenge(String challenge, Instant expiresAt) {
@@ -41,17 +46,22 @@ public class StepUpController {
 
 	private final StepUpService stepUp;
 	private final SecuritySettings settings;
+	private final AdminActionService actions;
+	private final ApiKeyService apiKeys;
 
-	public StepUpController(StepUpService stepUp, SecuritySettings settings) {
+	public StepUpController(StepUpService stepUp, SecuritySettings settings, AdminActionService actions,
+			ApiKeyService apiKeys) {
 		this.stepUp = stepUp;
 		this.settings = settings;
+		this.actions = actions;
+		this.apiKeys = apiKeys;
 	}
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
 	StepUpChallenge challenge(@Valid @RequestBody StepUpRequest body, @AuthenticationPrincipal BlockAuthPrincipal principal,
 			Authentication authentication, HttpServletRequest request) {
-		boolean admin = authentication.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+		boolean admin = AuthorityUtils.authorityListToSet(authentication.getAuthorities()).contains("ROLE_ADMIN");
 		AuthenticationChallenge challenge = stepUp.issue(principal, admin, body.action(), details(body),
 				ClientInfoResolver.resolve(request));
 		return new StepUpChallenge(challenge.getChallenge(), challenge.getExpiresAt());
@@ -65,12 +75,15 @@ public class StepUpController {
 					required(body.endUserSessions(), "endUserSessions"));
 			case CREATE_API_KEY -> ApiKeySpec.of(body.name(), body.scopes(), body.days(), settings.apiKeyMaxDays())
 				.details();
+			// Named from the stored record, so the wallet shows exactly what is being cancelled or revoked.
+			case CANCEL_ADMIN_ACTION -> actions.cancelDetails(required(body.actionId(), "actionId"));
+			case REVOKE_API_KEY -> apiKeys.revokeDetails(required(body.keyId(), "keyId"));
 			case LIFT_EMERGENCY_STOP, ENABLE_SECOND_STEP, DISABLE_SECOND_STEP, RENEW_BACKUP_CODES ->
 				StepUpDetails.none();
 		};
 	}
 
-	private static boolean required(Boolean value, String field) {
+	private static <T> T required(T value, String field) {
 		if (value == null) {
 			throw BlockAuthException.invalid(field, "is required");
 		}

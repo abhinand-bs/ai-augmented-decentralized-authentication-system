@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.UUID;
 import java.util.function.Predicate;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -31,7 +32,7 @@ public class ChallengeService {
 
 	public ChallengeService(AuthenticationChallengeRepository challenges, ChallengeMessageFactory factory,
 			InMemoryRateLimiter limiter, AuditService audit, Clock clock,
-			PlatformTransactionManager transactionManager) {
+			@NonNull PlatformTransactionManager transactionManager) {
 		this.challenges = challenges;
 		this.factory = factory;
 		this.limiter = limiter;

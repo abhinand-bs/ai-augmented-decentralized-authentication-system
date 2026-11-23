@@ -1,17 +1,24 @@
 package com.blockauth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -91,6 +98,14 @@ public abstract class IntegrationTest {
 	/** The stand-in chain: wallet -> status. */
 	protected final Map<String, OnChainWalletStatus> chain = new ConcurrentHashMap<>();
 
+	/** The contract's waiting period on the stand-in chain, equal to the test profile's ADMIN_ACTION_DELAY. */
+	protected static final Duration CHAIN_DELAY = Duration.ofMinutes(10);
+	/** Waiting reactivations on the stand-in chain: wallet -> when they can be carried out. */
+	protected final Map<String, Instant> chainActivations = new ConcurrentHashMap<>();
+	protected final AtomicBoolean chainPaused = new AtomicBoolean();
+	private static final AtomicLong chainBlock = new AtomicLong();
+	protected final AtomicReference<Instant> chainUnpauseAt = new AtomicReference<>();
+
 	@BeforeEach
 	void resetState() {
 		jdbc.execute("TRUNCATE users, authentication_challenges, authentication_events, security_events, devices, "
@@ -102,6 +117,9 @@ public abstract class IntegrationTest {
 		rateLimiter.clear();
 		clock.reset();
 		chain.clear();
+		chainActivations.clear();
+		chainPaused.set(false);
+		chainUnpauseAt.set(null);
 		stubChain();
 	}
 
@@ -113,14 +131,57 @@ public abstract class IntegrationTest {
 				.getWalletStatus(anyString());
 		doAnswer(call -> {
 			OnChainWalletStatus active = new OnChainWalletStatus(true, true, clock.instant());
-			return transition(chain.putIfAbsent(call.getArgument(0), active) == null);
+			return transition(!chainPaused.get() && chain.putIfAbsent(call.getArgument(0), active) == null);
 		}).when(registry).registerWallet(anyString());
-		doAnswer(call -> transition(chain.computeIfPresent(call.getArgument(0),
-				(w, s) -> s.active() ? new OnChainWalletStatus(true, false, s.registeredAt()) : null) != null))
-				.when(registry).revokeWallet(anyString());
-		doAnswer(call -> transition(chain.computeIfPresent(call.getArgument(0),
-				(w, s) -> s.active() ? null : new OnChainWalletStatus(true, true, s.registeredAt())) != null))
-				.when(registry).activateWallet(anyString());
+		doAnswer(call -> {
+			chainActivations.remove(call.<String>getArgument(0));
+			return transition(chain.computeIfPresent(call.getArgument(0),
+					(w, s) -> s.active() ? new OnChainWalletStatus(true, false, s.registeredAt()) : null) != null);
+		}).when(registry).revokeWallet(anyString());
+		// Like the contract: a reactivation is requested for a revoked wallet, waits CHAIN_DELAY, then applies.
+		doAnswer(call -> {
+			String wallet = call.getArgument(0);
+			OnChainWalletStatus status = chain.get(wallet);
+			boolean allowed = !chainPaused.get() && status != null && !status.active()
+					&& chainActivations.putIfAbsent(wallet, clock.instant().plus(CHAIN_DELAY)) == null;
+			return transition(allowed);
+		}).when(registry).requestActivation(anyString());
+		doAnswer(call -> {
+			String wallet = call.getArgument(0);
+			Instant readyAt = chainActivations.get(wallet);
+			boolean allowed = !chainPaused.get() && readyAt != null && !clock.instant().isBefore(readyAt);
+			if (allowed) {
+				chainActivations.remove(wallet);
+				chain.computeIfPresent(wallet, (w, s) -> new OnChainWalletStatus(true, true, s.registeredAt()));
+			}
+			return transition(allowed);
+		}).when(registry).executeActivation(anyString());
+		doAnswer(call -> transition(chainActivations.remove(call.<String>getArgument(0)) != null))
+				.when(registry).cancelActivation(anyString());
+		doAnswer(call -> chainActivations.get(call.<String>getArgument(0))).when(registry).activationReadyAt(anyString());
+		doAnswer(call -> new LinkedHashSet<>(chainActivations.keySet())).when(registry)
+				.walletsWithActivationRequests(anyLong(), anyLong());
+		// Like a real chain, each look finds a newer block.
+		doAnswer(call -> chainBlock.incrementAndGet()).when(registry).blockNumber();
+		doAnswer(call -> chainPaused.get()).when(registry).paused();
+		doAnswer(call -> chainUnpauseAt.get()).when(registry).unpauseReadyAt();
+		doAnswer(call -> {
+			boolean allowed = chainPaused.compareAndSet(false, true);
+			chainUnpauseAt.set(null);
+			return transition(allowed);
+		}).when(registry).pause();
+		doAnswer(call -> transition(chainPaused.get()
+				&& chainUnpauseAt.compareAndSet(null, clock.instant().plus(CHAIN_DELAY)))).when(registry).requestUnpause();
+		doAnswer(call -> {
+			Instant readyAt = chainUnpauseAt.get();
+			boolean allowed = chainPaused.get() && readyAt != null && !clock.instant().isBefore(readyAt);
+			if (allowed) {
+				chainPaused.set(false);
+				chainUnpauseAt.set(null);
+			}
+			return transition(allowed);
+		}).when(registry).executeUnpause();
+		doAnswer(call -> transition(chainUnpauseAt.getAndSet(null) != null)).when(registry).cancelUnpause();
 	}
 
 	// Like the contract, an impossible transition reverts.

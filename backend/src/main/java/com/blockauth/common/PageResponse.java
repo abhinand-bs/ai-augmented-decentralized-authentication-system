@@ -3,6 +3,7 @@ package com.blockauth.common;
 import java.util.List;
 import java.util.function.Function;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -16,12 +17,12 @@ public record PageResponse<T>(List<T> items, int page, int size, long totalEleme
 	}
 
 	/** Validated, newest-first page request (page >= 0, size 1-100). */
-	public static Pageable request(int page, int size, String sortField) {
+	public static @NonNull Pageable request(int page, int size, String sortField) {
 		return request(page, size, Sort.by(Sort.Direction.DESC, sortField, "id"));
 	}
 
 	/** Validated page request (page >= 0, size 1-100) in the given order. */
-	public static Pageable request(int page, int size, Sort sort) {
+	public static @NonNull Pageable request(int page, int size, @NonNull Sort sort) {
 		if (page < 0) {
 			throw BlockAuthException.invalid("page", "must be 0 or greater");
 		}

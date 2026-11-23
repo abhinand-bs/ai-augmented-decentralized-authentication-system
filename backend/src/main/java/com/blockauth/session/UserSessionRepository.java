@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.blockauth.user.User;
 import com.blockauth.user.UserRole;
 
 /** Every "end" update applies only to open records, so the first reason recorded is the one that stays. */
@@ -21,6 +22,10 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
 	@Query("select new com.blockauth.session.SessionAndUser(s, u) from UserSession s join User u on u.id = s.userId "
 			+ "where s.id = :id")
 	Optional<SessionAndUser> findWithUser(@Param("id") UUID id);
+
+	/** Users that hold at least one open session record. */
+	@Query("select distinct u from UserSession s join User u on u.id = s.userId where s.endedAt is null")
+	List<User> findUsersWithOpenSessions();
 
 	@Query("select s from UserSession s where s.userId = :userId and s.endedAt is null and s.lastSeenAt > :since "
 			+ "order by s.lastSeenAt desc")

@@ -1,0 +1,24 @@
+Terminal 1: blockchain (leave it running)
+
+cd C:\BlockAuth\contracts
+
+npx hardhat node
+
+
+Terminal 2: deploy the contract, then start the backend
+
+cd C:\BlockAuth\contracts
+
+npx hardhat run scripts/deploy.js --network localhost
+
+cd C:\BlockAuth\backend
+
+Get-Content ..\.env.local | Where-Object { $_ -match '^TEST_DB_(URL|USERNAME|PASSWORD)=(.*)$' } | ForEach-Object { Set-Item "env:DB_$($Matches[1])" $Matches[2] }
+.\mvnw.cmd spring-boot:run
+
+
+Terminal 3: frontend
+
+cd C:\BlockAuth\frontend
+
+npm run dev

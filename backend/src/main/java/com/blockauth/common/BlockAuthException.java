@@ -4,6 +4,8 @@ import java.util.List;
 
 public class BlockAuthException extends RuntimeException {
 
+	private static final long serialVersionUID = 1L;
+
 	private final ErrorCode code;
 	private final List<ApiError.FieldError> fieldErrors;
 	private final long retryAfterSeconds;

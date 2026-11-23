@@ -1,5 +1,7 @@
 package com.blockauth.admin;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -46,8 +48,11 @@ public class AdminWalletService {
 	private final StepUpService stepUp;
 	private final SessionRegistry sessions;
 
+	private final Clock clock;
+
 	public AdminWalletService(WalletRegistryClient registry, UserService users, AuditService audit,
-			StepUpService stepUp, SessionRegistry sessions) {
+			StepUpService stepUp, SessionRegistry sessions, Clock clock) {
+		this.clock = clock;
 		this.registry = registry;
 		this.users = users;
 		this.audit = audit;
@@ -109,8 +114,27 @@ public class AdminWalletService {
 	}
 
 	/**
+	 * Starts the contract's own waiting period for the reactivation, so it runs alongside the server's. A
+	 * request already waiting on the chain is kept: there can be only one per wallet.
+	 */
+	void requestActivationOnChain(String wallet) {
+		if (registry.activationReadyAt(wallet) == null) {
+			registry.requestActivation(wallet);
+		}
+	}
+
+	/** Cancels the wallet's waiting reactivation on the chain, if there is one. */
+	void cancelActivationOnChain(String wallet) {
+		if (registry.activationReadyAt(wallet) != null) {
+			registry.cancelActivation(wallet);
+		}
+	}
+
+	/**
 	 * Carries out a reactivation whose waiting period is over. Safe to run again: a wallet the chain
 	 * already shows as active is left alone.
+	 * @throws BlockAuthException CHAIN_REQUEST_MISSING when the chain has no request any more (the guardian
+	 * cancelled it, or replaced the operator); CHAIN_DELAY_PENDING while the contract's delay is not over
 	 */
 	void executeActivation(String wallet, UUID requestedBy, String requesterWallet) {
 		OnChainWalletStatus status = users.chainStatus(wallet);
@@ -120,9 +144,16 @@ public class AdminWalletService {
 		if (status.active()) {
 			return;
 		}
+		Instant readyAt = registry.activationReadyAt(wallet);
+		if (readyAt == null) {
+			throw new BlockAuthException(ErrorCode.CHAIN_REQUEST_MISSING);
+		}
+		if (readyAt.isAfter(clock.instant())) {
+			throw new BlockAuthException(ErrorCode.CHAIN_DELAY_PENDING);
+		}
 		String txHash;
 		try {
-			txHash = registry.activateWallet(wallet);
+			txHash = registry.executeActivation(wallet);
 		}
 		catch (BlockAuthException e) {
 			if (e.code() == ErrorCode.BLOCKCHAIN_TX_FAILED && users.chainStatus(wallet).active()) {

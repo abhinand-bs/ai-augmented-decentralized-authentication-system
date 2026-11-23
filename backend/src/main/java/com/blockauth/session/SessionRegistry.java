@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,7 +40,7 @@ public class SessionRegistry {
 
 	public SessionRegistry(DeviceRepository devices, UserDeviceRepository links, UserSessionRepository sessions,
 			SignInAlertRepository alerts, DeviceCookie cookie, SecuritySettings settings, Clock clock,
-			PlatformTransactionManager transactionManager) {
+			@NonNull PlatformTransactionManager transactionManager) {
 		this.devices = devices;
 		this.links = links;
 		this.sessions = sessions;

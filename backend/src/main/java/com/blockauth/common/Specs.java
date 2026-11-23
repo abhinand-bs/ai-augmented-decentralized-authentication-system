@@ -2,6 +2,7 @@ package com.blockauth.common;
 
 import java.time.Instant;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.jpa.domain.Specification;
 
 /** Optional-filter building blocks for admin list queries; a null value means "no filter". */
@@ -10,11 +11,11 @@ public final class Specs {
 	private Specs() {
 	}
 
-	public static <T> Specification<T> eq(String field, Object value) {
+	public static <T> @NonNull Specification<T> eq(String field, Object value) {
 		return (root, query, cb) -> value == null ? cb.conjunction() : cb.equal(root.get(field), value);
 	}
 
-	public static <T> Specification<T> between(String field, Instant from, Instant to) {
+	public static <T> @NonNull Specification<T> between(String field, Instant from, Instant to) {
 		if (from != null && to != null && from.isAfter(to)) {
 			throw BlockAuthException.invalid("from", "must not be after 'to'");
 		}

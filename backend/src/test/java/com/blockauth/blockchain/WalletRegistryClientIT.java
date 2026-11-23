@@ -30,7 +30,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.web3j.crypto.Bip32ECKeyPair;
 import org.web3j.crypto.Keys;
+import org.web3j.crypto.MnemonicUtils;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.exceptions.ClientConnectionException;
 import org.web3j.protocol.http.HttpService;
@@ -40,6 +42,7 @@ import com.blockauth.TestWallet;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.ErrorCode;
 import com.blockauth.config.BlockAuthProperties;
+import com.blockauth.config.SecuritySettings;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -92,9 +95,54 @@ class WalletRegistryClientIT {
 		assertThat(client.revokeWallet(wallet)).startsWith("0x");
 		assertThat(client.getWalletStatus(wallet).label()).isEqualTo("REVOKED");
 
-		assertThat(client.activateWallet(wallet)).startsWith("0x");
+		// Reactivation waits the contract's delay, even for the operator key.
+		assertThat(client.requestActivation(wallet)).startsWith("0x");
+		assertThat(client.activationReadyAt(wallet)).isAfter(Instant.now().plus(client.delay()).minusSeconds(60));
+		assertThat(client.walletsWithActivationRequests(0, client.blockNumber())).contains(wallet);
+		assertFails(() -> client.executeActivation(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
+		assertThat(client.getWalletStatus(wallet).label()).isEqualTo("REVOKED");
+		passTheDelay();
+		assertThat(client.executeActivation(wallet)).startsWith("0x");
+		assertThat(client.activationReadyAt(wallet)).isNull();
 		// The registration time survives revocation and reactivation.
 		assertThat(client.getWalletStatus(wallet)).isEqualTo(registered);
+	}
+
+	@Test
+	void theGuardianCancelsWhatTheOperatorRequestsAndAPauseBlocksAccessGrants() {
+		String wallet = new TestWallet().address();
+		client.registerWallet(wallet);
+		client.revokeWallet(wallet);
+		WalletRegistryClient guardian = clientFor(new BlockAuthProperties.Blockchain(config.rpcUrl(), config.chainId(),
+				config.contractAddress(), hardhatAccountKey(1)), Duration.ofSeconds(30));
+		assertThat(client.contractGuardian()).isEqualTo(guardian.operatorAddress());
+
+		client.requestActivation(wallet);
+		guardian.cancelActivation(wallet);
+		passTheDelay();
+		assertFails(() -> client.executeActivation(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
+		assertThat(client.getWalletStatus(wallet).active()).isFalse();
+		// The guardian holds no operator rights: it cannot register or request a reactivation itself.
+		assertFails(() -> guardian.registerWallet(new TestWallet().address()), ErrorCode.BLOCKCHAIN_TX_FAILED);
+		assertFails(() -> guardian.requestActivation(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
+
+		guardian.pause();
+		try {
+			assertThat(client.paused()).isTrue();
+			assertFails(() -> client.registerWallet(new TestWallet().address()), ErrorCode.BLOCKCHAIN_TX_FAILED);
+			assertFails(() -> client.requestActivation(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
+			client.requestUnpause();
+			assertThat(client.unpauseReadyAt()).isNotNull();
+			assertFails(client::executeUnpause, ErrorCode.BLOCKCHAIN_TX_FAILED);
+		}
+		finally {
+			if (client.unpauseReadyAt() == null) {
+				client.requestUnpause();
+			}
+			passTheDelay();
+			client.executeUnpause();
+		}
+		assertThat(client.paused()).isFalse();
 	}
 
 	@Test
@@ -102,20 +150,20 @@ class WalletRegistryClientIT {
 		String wallet = new TestWallet().address();
 		long blockBefore = blockNumber();
 		assertFails(() -> client.revokeWallet(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
-		assertFails(() -> client.activateWallet(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
+		assertFails(() -> client.requestActivation(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
 		assertFails(() -> client.registerWallet("0x0000000000000000000000000000000000000000"),
 				ErrorCode.BLOCKCHAIN_TX_FAILED);
 		assertThat(blockNumber()).isEqualTo(blockBefore);
 
 		client.registerWallet(wallet);
 		assertFails(() -> client.registerWallet(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
-		assertFails(() -> client.activateWallet(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
+		assertFails(() -> client.requestActivation(wallet), ErrorCode.BLOCKCHAIN_TX_FAILED);
 		assertThat(client.getWalletStatus(wallet).valid()).isTrue();
 	}
 
 	@Test
 	void anAccountThatIsNotTheContractAdminCannotChangeState() {
-		// A fresh key: it is not the deployer, so the contract's onlyAdmin check refuses it.
+		// A fresh key: it is neither the operator nor the guardian, so the contract refuses it.
 		WalletRegistryClient outsider = clientFor(new BlockAuthProperties.Blockchain(config.rpcUrl(),
 				config.chainId(), config.contractAddress(), randomPrivateKey()), Duration.ofSeconds(5));
 		String wallet = new TestWallet().address();
@@ -235,8 +283,17 @@ class WalletRegistryClientIT {
 	void startupVerifierAcceptsTheConfiguredChain() {
 		assertThat(client.chainId()).isEqualTo(config.chainId());
 		assertThat(client.contractHasCode()).isTrue();
-		assertThat(client.contractAdmin()).isEqualTo(client.operatorAddress());
+		assertThat(client.contractOperator()).isEqualTo(client.operatorAddress());
+		assertThat(client.contractGuardian()).isNotEqualTo(client.operatorAddress());
 		assertThatCode(() -> verifier(config).verify()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void startupVerifierRejectsAContractThatWaitsLongerThanTheServer() {
+		Duration shorter = client.delay().minusSeconds(1);
+
+		assertThatThrownBy(() -> verifier(config, shorter).verify()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("ADMIN_ACTION_DELAY");
 	}
 
 	@Test
@@ -252,7 +309,7 @@ class WalletRegistryClientIT {
 		String foreignKey = randomPrivateKey();
 		assertThatThrownBy(() -> verifier(new BlockAuthProperties.Blockchain(config.rpcUrl(), config.chainId(),
 				config.contractAddress(), foreignKey)).verify()).isInstanceOf(IllegalStateException.class)
-				.hasMessageContaining("admin").hasMessageNotContaining(foreignKey.substring(2));
+				.hasMessageContaining("operator").hasMessageNotContaining(foreignKey.substring(2));
 	}
 
 	@Test
@@ -273,8 +330,31 @@ class WalletRegistryClientIT {
 	}
 
 	private static BlockchainStartupVerifier verifier(BlockAuthProperties.Blockchain blockchain) {
+		return verifier(blockchain, Duration.ofDays(1));
+	}
+
+	private static BlockchainStartupVerifier verifier(BlockAuthProperties.Blockchain blockchain, Duration adminActionDelay) {
+		byte[] key = new byte[32];
+		new java.security.SecureRandom().nextBytes(key);
+		SecuritySettings settings = new SecuritySettings(java.util.Base64.getEncoder().encodeToString(key), 30,
+				adminActionDelay, 90, new SecuritySettings.Trust(90, 50, 30, 20, 35, 25, 3, 35, 3));
 		return new BlockchainStartupVerifier(clientFor(blockchain, Duration.ofSeconds(5)),
-				new BlockAuthProperties("http://localhost:5173", 120, List.of(), blockchain));
+				new BlockAuthProperties("http://localhost:5173", 120, List.of(), blockchain), settings);
+	}
+
+	/** Moves the node's clock past the contract's waiting period. */
+	private static void passTheDelay() {
+		rpc("evm_increaseTime", client.delay().toSeconds());
+		rpc("evm_mine");
+	}
+
+	/** A Hardhat development account, derived from the node's public test mnemonic (local chain only). */
+	private static String hardhatAccountKey(int index) {
+		byte[] seed = MnemonicUtils.generateSeed("test test test test test test test test test test test junk", "");
+		int hardened = 0x80000000;
+		Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(Bip32ECKeyPair.generateKeyPair(seed),
+				new int[] { 44 | hardened, 60 | hardened, hardened, 0, index });
+		return Numeric.toHexStringWithPrefixZeroPadded(key.getPrivateKey(), 64);
 	}
 
 	private static String randomPrivateKey() {

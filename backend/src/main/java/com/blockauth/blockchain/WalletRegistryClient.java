@@ -4,27 +4,35 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.web3j.abi.EventEncoder;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.Bool;
+import org.web3j.abi.datatypes.Event;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Uint64;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.core.methods.request.Transaction;
 import org.web3j.protocol.core.methods.response.EthCall;
 import org.web3j.protocol.core.methods.response.EthEstimateGas;
+import org.web3j.protocol.core.methods.response.EthLog;
+import org.web3j.protocol.core.methods.response.Log;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.tx.RawTransactionManager;
@@ -35,7 +43,8 @@ import com.blockauth.config.BlockAuthProperties;
 
 /**
  * The only class that talks to the WalletRegistry contract. Reads are {@code eth_call}s; writes are
- * transactions signed by the operator account, which is the contract's immutable admin.
+ * transactions signed by the operator account. The contract gives that account no way to restore access
+ * at once: a reactivation or an unpause is requested, waits the contract's delay, and is then carried out.
  */
 @Component
 public class WalletRegistryClient {
@@ -44,6 +53,10 @@ public class WalletRegistryClient {
 	private static final BigInteger MAX_GAS = BigInteger.valueOf(200_000);
 	private static final Duration DEFAULT_RECEIPT_TIMEOUT = Duration.ofSeconds(30);
 	private static final long RECEIPT_POLL_MILLIS = 250;
+	private static final Event ACTIVATION_REQUESTED = new Event("ActivationRequested",
+			List.of(new TypeReference<Address>(true) {
+			}, new TypeReference<Uint64>() {
+			}));
 
 	private final Web3j web3j;
 	private final Credentials operator;
@@ -88,16 +101,118 @@ public class WalletRegistryClient {
 		return send("revokeWallet", wallet);
 	}
 
-	/** @return the transaction hash */
-	public String activateWallet(String wallet) {
-		return send("activateWallet", wallet);
+	/** Starts the contract's waiting period for reactivating a revoked wallet. @return the transaction hash */
+	public String requestActivation(String wallet) {
+		return send("requestActivation", wallet);
 	}
 
-	/** Lowercase address of the contract's immutable admin. */
-	public String contractAdmin() {
-		Function function = new Function("admin", List.of(), List.of(new TypeReference<Address>() {
+	/** Reactivates the wallet once its request has waited the contract's delay. @return the transaction hash */
+	public String executeActivation(String wallet) {
+		return send("executeActivation", wallet);
+	}
+
+	/** @return the transaction hash */
+	public String cancelActivation(String wallet) {
+		return send("cancelActivation", wallet);
+	}
+
+	/** Pauses the contract: no registration or reactivation until an unpause has waited its delay. */
+	public String pause() {
+		return send("pause", List.of());
+	}
+
+	public String requestUnpause() {
+		return send("requestUnpause", List.of());
+	}
+
+	public String executeUnpause() {
+		return send("executeUnpause", List.of());
+	}
+
+	public String cancelUnpause() {
+		return send("cancelUnpause", List.of());
+	}
+
+	/** When the waiting reactivation of {@code wallet} can be carried out; null when none is waiting. */
+	public Instant activationReadyAt(String wallet) {
+		return instantOrNull(readUint64("activationReadyAt", List.of(new Address(wallet))));
+	}
+
+	/** When the waiting unpause can be carried out; null when none is waiting. */
+	public Instant unpauseReadyAt() {
+		return instantOrNull(readUint64("unpauseReadyAt", List.of()));
+	}
+
+	public boolean paused() {
+		Function function = new Function("paused", List.of(), List.of(new TypeReference<Bool>() {
+		}));
+		return (Boolean) call(function).get(0).getValue();
+	}
+
+	/** The contract's waiting period for reactivations and unpauses. */
+	public Duration delay() {
+		return Duration.ofSeconds(readUint64("delay", List.of()));
+	}
+
+	/** Lowercase address of the contract's operator: the key allowed to send registry transactions. */
+	public String contractOperator() {
+		return readAddress("operator");
+	}
+
+	/** Lowercase address of the contract's guardian, the separate key that can cancel and replace the operator. */
+	public String contractGuardian() {
+		return readAddress("guardian");
+	}
+
+	public long blockNumber() {
+		try {
+			return web3j.ethBlockNumber().send().getBlockNumber().longValueExact();
+		}
+		catch (IOException | RuntimeException e) {
+			throw unavailable(e);
+		}
+	}
+
+	/** Wallets for which an ActivationRequested event was emitted in blocks {@code from} to {@code to}. */
+	public Set<String> walletsWithActivationRequests(long from, long to) {
+		EthFilter filter = new EthFilter(DefaultBlockParameter.valueOf(BigInteger.valueOf(from)),
+				DefaultBlockParameter.valueOf(BigInteger.valueOf(to)), contractAddress)
+			.addSingleTopic(EventEncoder.encode(ACTIVATION_REQUESTED));
+		try {
+			EthLog logs = web3j.ethGetLogs(filter).send();
+			if (logs.hasError()) {
+				throw new BlockAuthException(ErrorCode.BLOCKCHAIN_UNAVAILABLE);
+			}
+			Set<String> wallets = new LinkedHashSet<>();
+			for (EthLog.LogResult<?> result : logs.getLogs()) {
+				// eth_getLogs answers with log objects; anything else means the node cannot be trusted here.
+				if (!(result.get() instanceof Log log)) {
+					throw new BlockAuthException(ErrorCode.BLOCKCHAIN_UNAVAILABLE);
+				}
+				String topic = log.getTopics().get(1);
+				wallets.add(("0x" + topic.substring(topic.length() - 40)).toLowerCase());
+			}
+			return wallets;
+		}
+		catch (IOException | RuntimeException e) {
+			throw e instanceof BlockAuthException known ? known : unavailable(e);
+		}
+	}
+
+	private long readUint64(String name, List<Type> arguments) {
+		Function function = new Function(name, arguments, List.of(new TypeReference<Uint64>() {
+		}));
+		return ((BigInteger) call(function).get(0).getValue()).longValueExact();
+	}
+
+	private String readAddress(String name) {
+		Function function = new Function(name, List.of(), List.of(new TypeReference<Address>() {
 		}));
 		return ((String) call(function).get(0).getValue()).toLowerCase();
+	}
+
+	private static Instant instantOrNull(long epochSeconds) {
+		return epochSeconds == 0 ? null : Instant.ofEpochSecond(epochSeconds);
 	}
 
 	public String operatorAddress() {
@@ -143,9 +258,14 @@ public class WalletRegistryClient {
 		}
 	}
 
+	private String send(String functionName, String wallet) {
+		return send(functionName, List.of(new Address(wallet)));
+	}
+
 	// Serialized so the operator account's transaction nonce never collides.
-	private synchronized String send(String functionName, String wallet) {
-		String data = FunctionEncoder.encode(new Function(functionName, List.of(new Address(wallet)), List.of()));
+	@SuppressWarnings("rawtypes")
+	private synchronized String send(String functionName, List<Type> arguments) {
+		String data = FunctionEncoder.encode(new Function(functionName, arguments, List.of()));
 		String txHash;
 		try {
 			EthEstimateGas estimate = web3j

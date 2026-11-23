@@ -2,6 +2,7 @@ package com.blockauth;
 
 import java.time.Clock;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
@@ -16,7 +17,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class BlockAuthApplication {
 
-	public static void main(String[] args) {
+	public static void main(String @NonNull [] args) {
 		SpringApplication.run(BlockAuthApplication.class, args);
 	}
 

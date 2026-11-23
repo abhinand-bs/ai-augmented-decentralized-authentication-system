@@ -3,6 +3,7 @@ package com.blockauth.auth;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -33,12 +34,12 @@ public class SessionService {
 	private final CsrfTokenRepository csrfTokenRepository;
 	private final SessionRegistry registry;
 	private final AuditService audit;
-	private final String cookieName;
+	private final @NonNull String cookieName;
 	private final boolean secureCookie;
 
 	public SessionService(SecurityContextRepository contextRepository, CsrfTokenRepository csrfTokenRepository,
 			SessionRegistry registry, AuditService audit,
-			@Value("${server.servlet.session.cookie.name:JSESSIONID}") String cookieName,
+			@Value("${server.servlet.session.cookie.name:JSESSIONID}") @NonNull String cookieName,
 			@Value("${server.servlet.session.cookie.secure:true}") boolean secureCookie) {
 		this.contextRepository = contextRepository;
 		this.csrfTokenRepository = csrfTokenRepository;

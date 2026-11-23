@@ -135,7 +135,7 @@ class ApiKeyIT extends IntegrationTest {
 		String key = created.body().get("token").asString();
 		String id = created.body().get("key").get("id").asString();
 
-		Api.Response revoked = admin.post("/api/admin/api-keys/" + id + "/revoke", null);
+		Api.Response revoked = revoke(id);
 
 		assertThat(revoked.body().get("status").asString()).isEqualTo("REVOKED");
 		assertThat(withKey(key, "/api/admin/users").code()).isEqualTo("INVALID_API_KEY");
@@ -144,13 +144,41 @@ class ApiKeyIT extends IntegrationTest {
 	}
 
 	@Test
+	void revokingAKeyNeedsAFreshSignatureNamingTheKey() {
+		Api.Response created = create("Monitoring", List.of("users:read"), 30);
+		String key = created.body().get("token").asString();
+		String id = created.body().get("key").get("id").asString();
+		String otherId = create("Other", List.of("users:read"), 30).body().get("key").get("id").asString();
+		// What a stolen session can produce: challenges, but no signature from the administrator's wallet.
+		Map<String, Object> wrongSigner = proof(admin, new TestWallet(), "REVOKE_API_KEY", Map.of("keyId", id));
+		Map<String, Object> otherKey = proof(admin, ADMIN, "REVOKE_API_KEY", Map.of("keyId", otherId));
+
+		assertThat(admin.post("/api/admin/api-keys/" + id + "/revoke", Map.of()).code()).isEqualTo("VALIDATION_FAILED");
+		assertThat(admin.post("/api/admin/api-keys/" + id + "/revoke", wrongSigner).code()).isEqualTo("STEP_UP_FAILED");
+		assertThat(admin.post("/api/admin/api-keys/" + id + "/revoke", otherKey).code()).isEqualTo("STEP_UP_FAILED");
+		assertThat(withKey(key, "/api/admin/users").status()).isEqualTo(200);
+
+		Api.Response issued = admin.post("/api/auth/step-up", Map.of("action", "REVOKE_API_KEY", "keyId", id));
+		assertThat(issued.body().get("challenge").asString()).contains("Revoke the API key 'Monitoring' (" + id + ")");
+		assertThat(admin.post("/api/auth/step-up", Map.of("action", "REVOKE_API_KEY", "keyId",
+				java.util.UUID.randomUUID().toString())).status()).isEqualTo(404);
+		assertThat(revoke(id).body().get("status").asString()).isEqualTo("REVOKED");
+	}
+
+	private Api.Response revoke(String id) {
+		return admin.post("/api/admin/api-keys/" + id + "/revoke", proof(admin, ADMIN, "REVOKE_API_KEY", Map.of("keyId", id)));
+	}
+
+	@Test
 	void twoSimultaneousRevocationsAreRecordedOnce() {
 		String id = create("Twice", List.of("users:read"), 30).body().get("key").get("id").asString();
 		Api other = sameSession(admin);
+		Map<String, Object> first = proof(admin, ADMIN, "REVOKE_API_KEY", Map.of("keyId", id));
+		Map<String, Object> second = proof(admin, ADMIN, "REVOKE_API_KEY", Map.of("keyId", id));
 
 		List<Api.Response> responses = concurrently(List.<Supplier<Api.Response>>of(
-				() -> admin.post("/api/admin/api-keys/" + id + "/revoke", null),
-				() -> other.post("/api/admin/api-keys/" + id + "/revoke", null)));
+				() -> admin.post("/api/admin/api-keys/" + id + "/revoke", first),
+				() -> other.post("/api/admin/api-keys/" + id + "/revoke", second)));
 
 		assertThat(responses).extracting(Api.Response::status).containsOnly(200);
 		assertThat(responses).allSatisfy(r -> assertThat(r.body().get("status").asString()).isEqualTo("REVOKED"));

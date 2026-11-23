@@ -68,7 +68,10 @@ class LogoutIT extends IntegrationTest {
 		Api.Response response = api.get("/api/users/me");
 
 		assertThat(response.status()).isEqualTo(401);
-		assertThat(response.code()).isEqualTo("UNAUTHENTICATED");
+		// Usually the request finds the session expired (UNAUTHENTICATED). If Tomcat's background expiry is
+		// running at that moment, the session still counts as valid while its record is already closed, and
+		// the session check refuses it instead (SESSION_REVOKED). Either way the request is refused.
+		assertThat(response.code()).isIn("UNAUTHENTICATED", "SESSION_REVOKED");
 		// The session's record is closed as well, so it no longer appears in the user's session list.
 		assertThat(count("select count(*) from user_sessions where end_reason = 'EXPIRED'")).isEqualTo(1);
 		assertThat(count("select count(*) from user_sessions where ended_at is null")).isZero();

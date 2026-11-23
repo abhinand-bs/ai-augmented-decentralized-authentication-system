@@ -179,7 +179,8 @@ class EmergencyStopIT extends IntegrationTest {
 		switchOn(false, false);
 		long id = lift().body().get("id").asLong();
 
-		assertThat(admin.post("/api/admin/actions/" + id + "/cancel", null).body().get("status").asString())
+		assertThat(admin.post("/api/admin/actions/" + id + "/cancel",
+				proof(admin, ADMIN, "CANCEL_ADMIN_ACTION", Map.of("actionId", id))).body().get("status").asString())
 			.isEqualTo("CANCELLED");
 		clock.advance(AFTER_DELAY);
 		actions.runDue();

@@ -5,13 +5,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -69,7 +69,7 @@ public class SecondStepService {
 
 	public SecondStepService(SecondFactorRepository factors, BackupCodeRepository backupCodes, StepUpService stepUp,
 			SessionRegistry sessions, AuditService audit, InMemoryRateLimiter limiter, SecuritySettings settings,
-			Clock clock, PlatformTransactionManager transactionManager) {
+			Clock clock, @NonNull PlatformTransactionManager transactionManager) {
 		this.factors = factors;
 		this.backupCodes = backupCodes;
 		this.stepUp = stepUp;

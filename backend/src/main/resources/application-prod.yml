@@ -2,6 +2,7 @@
 server:
   # Honor X-Forwarded-* from the proxy: the real client address is rate limited, and requests are
   # recognised as HTTPS so the Strict-Transport-Security header is sent.
+  # Which proxies may report the client address is set by TRUSTED_PROXIES (application.yml).
   forward-headers-strategy: native
   servlet:
     session:

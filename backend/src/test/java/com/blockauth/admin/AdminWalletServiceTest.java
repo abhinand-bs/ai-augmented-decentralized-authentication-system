@@ -11,7 +11,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -56,7 +58,9 @@ class AdminWalletServiceTest {
 	private final AuditService audit = mock(AuditService.class);
 	private final StepUpService stepUp = mock(StepUpService.class);
 	private final SessionRegistry sessions = mock(SessionRegistry.class);
-	private final AdminWalletService service = new AdminWalletService(registry, users, audit, stepUp, sessions);
+	private static final Instant NOW = Instant.parse("2026-10-22T12:00:00Z");
+	private final AdminWalletService service = new AdminWalletService(registry, users, audit, stepUp, sessions,
+			Clock.fixed(NOW, ZoneOffset.UTC));
 
 	@Test
 	void revokeChecksTheFreshSignatureThenWritesChainMirrorSessionsAndAuditsTheActor() {
@@ -145,16 +149,32 @@ class AdminWalletServiceTest {
 	void delayedActivationIsSafeToRunTwice() {
 		UUID requester = UUID.randomUUID();
 		when(users.chainStatus(TARGET)).thenReturn(REVOKED, ACTIVE);
-		when(registry.activateWallet(TARGET)).thenReturn("0xtx");
+		when(registry.activationReadyAt(TARGET)).thenReturn(NOW.minusSeconds(1));
+		when(registry.executeActivation(TARGET)).thenReturn("0xtx");
 		when(users.setStatus(TARGET, UserStatus.ACTIVE)).thenReturn(Optional.empty());
 
 		service.executeActivation(TARGET, requester, ADMIN_WALLET);
 		service.executeActivation(TARGET, requester, ADMIN_WALLET);
 
 		// One transaction: the second run finds the wallet already active.
-		verify(registry).activateWallet(TARGET);
+		verify(registry).executeActivation(TARGET);
 		verify(audit).recordAuthEvent(AuthEventType.WALLET_ACTIVATED, AuthEventStatus.SUCCESS, TARGET, null, requester,
 				null, new ClientInfo(null, null));
+	}
+
+	@Test
+	void activationWaitsForTheContractAndFailsWhenTheChainHasNoRequest() {
+		when(users.chainStatus(TARGET)).thenReturn(REVOKED);
+
+		when(registry.activationReadyAt(TARGET)).thenReturn(NOW.plusSeconds(30));
+		assertFails(() -> service.executeActivation(TARGET, UUID.randomUUID(), ADMIN_WALLET), ErrorCode.CHAIN_DELAY_PENDING);
+
+		// Cancelled on the chain, e.g. by the guardian, or voided by replacing the operator.
+		when(registry.activationReadyAt(TARGET)).thenReturn(null);
+		assertFails(() -> service.executeActivation(TARGET, UUID.randomUUID(), ADMIN_WALLET), ErrorCode.CHAIN_REQUEST_MISSING);
+
+		verify(registry, never()).executeActivation(any());
+		verify(users, never()).setStatus(any(), any());
 	}
 
 	@Test

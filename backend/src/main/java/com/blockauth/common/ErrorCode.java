@@ -43,6 +43,7 @@ public enum ErrorCode {
 	EMERGENCY_STOP_NOT_ACTIVE(409, Level.INFO, "The emergency stop is not on."),
 	ADMIN_ACTION_ALREADY_PENDING(409, Level.INFO, "The same action is already waiting to take effect."),
 	ADMIN_ACTION_NOT_PENDING(409, Level.INFO, "This action is no longer waiting."),
+	CHAIN_REQUEST_MISSING(409, Level.WARN, "The blockchain holds no matching request: it was cancelled there."),
 	PAYLOAD_TOO_LARGE(413, Level.WARN, "Request body too large."),
 	UNSUPPORTED_MEDIA_TYPE(415, Level.DEBUG, "Content-Type must be application/json."),
 	RATE_LIMITED(429, Level.WARN, "Too many requests. Try again later."),
@@ -53,6 +54,7 @@ public enum ErrorCode {
 	DATABASE_UNAVAILABLE(503, Level.ERROR, "Service temporarily unavailable."),
 	RISK_CHECK_UNAVAILABLE(503, Level.ERROR, "Sign-in checks are temporarily unavailable."),
 	EMERGENCY_STOP_ACTIVE(503, Level.WARN, "This is paused by an administrator."),
+	CHAIN_DELAY_PENDING(503, Level.INFO, "The blockchain's waiting period is not over yet."),
 	BLOCKCHAIN_TIMEOUT(504, Level.ERROR, "Blockchain did not confirm in time. Try again.");
 
 	private final int status;

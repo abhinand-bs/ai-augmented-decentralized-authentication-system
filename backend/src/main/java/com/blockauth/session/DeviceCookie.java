@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -23,7 +24,7 @@ public class DeviceCookie {
 
 	static final String NAME = "BLOCKAUTH_DEVICE";
 	private static final Pattern TOKEN = Pattern.compile("^[A-Za-z0-9_-]{43}$");
-	private static final Duration LIFETIME = Duration.ofDays(400);
+	private static final @NonNull Duration LIFETIME = Duration.ofDays(400);
 
 	private final boolean secure;
 

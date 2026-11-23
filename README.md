@@ -57,9 +57,9 @@ login with an on-chain identity registry and a hardened, session-based web backe
 | New sign-in alerts | A sign-in on a new device is shown on the wallet's other sessions with "This was me" and "This was not me". Alerts are shown in the app only. |
 | Second step | Optional authenticator-app codes (TOTP, RFC 6238) and ten one-time backup codes, asked for when a sign-in does not look like the wallet's usual one. |
 | Trust score | Each verified sign-in is scored from 100 down (new device, new network, flagged wallet, repeated failures from the same address, device shared with a flagged wallet). Low scores require the second step, or are refused when the wallet has none. |
-| Fresh signature for sensitive actions | Revoking or reactivating a wallet, the emergency stop, flags, second-step changes and API keys need a new wallet signature over a one-time message naming the action and its parameters. |
-| Emergency stop | Pauses registrations, reactivations, second-step resets, flag removal and API-key creation, and optionally user sign-ins. Administrators can always sign in; revoking stays possible. |
-| Waiting period for admin actions | Reactivating a wallet, resetting a second step and lifting the emergency stop take effect only after a configurable delay, during which any administrator can cancel them. |
+| Fresh signature for sensitive actions | Revoking or reactivating a wallet, the emergency stop, flags, second-step changes, creating and revoking API keys, and cancelling a waiting action need a new wallet signature over a one-time message naming the action and its parameters. |
+| Emergency stop | Pauses registrations, reactivations, second-step resets, flag removal and API-key creation, and optionally user sign-ins. It also pauses the contract, so the operator key cannot register or reactivate wallets on the chain either. Administrators can always sign in; revoking stays possible. |
+| Waiting period for admin actions | Reactivating a wallet, resetting a second step and lifting the emergency stop take effect only after a configurable delay, during which any administrator can cancel them. Reactivations and lifting the stop also wait on the chain, where the contract itself enforces the delay. |
 | Read-only API keys | Administrator-owned keys for scripts, sent as `X-API-Key`, with scopes `users:read`, `audit:read` and `wallet-status:read`, valid for at most 90 days. |
 
 ## System architecture
@@ -80,11 +80,12 @@ flowchart LR
 |---|---|
 | Frontend (`frontend/`) | Pages, wallet connection, asking MetaMask for signatures, showing results. It never stores authentication state in web storage. |
 | Backend (`backend/`) | Challenges, signature verification, contract reads and writes, sessions, authorization, validation, rate limiting and auditing. |
-| Smart contract (`contracts/`) | The authoritative registered / active / revoked status per wallet. Only its admin account (the backend's operator key) can change it. |
+| Smart contract (`contracts/`) | The authoritative registered / active / revoked status per wallet. The operator key (held by the backend) registers and revokes at once; reactivating and unpausing must wait the contract's delay. A separate guardian key can cancel waiting requests, pause, revoke and replace the operator. |
 | Database | Users and roles, the status mirror, challenges, sessions and devices, second-step data, audit events. |
 
 Users never send blockchain transactions: the backend's operator account sends `registerWallet`,
-`revokeWallet` and `activateWallet`, so MetaMask needs no ETH and no network switch.
+`revokeWallet`, `requestActivation`/`executeActivation` and the pause calls, so MetaMask needs no ETH and no
+network switch. The guardian key is used outside BlockAuth (`contracts/scripts/guardian.js`).
 
 ## Sign-in workflow
 
@@ -221,8 +222,13 @@ then deploy from a second terminal in `contracts/`:
 npx hardhat run scripts/deploy.js --network localhost
 ```
 
-Copy the printed address into `CONTRACT_ADDRESS`. The keys printed by `hardhat node` are public test
-keys: use them only on the local chain.
+Copy the printed address into `CONTRACT_ADDRESS`. Account #0 becomes the **operator**; Account #1 becomes
+the **guardian** (set `GUARDIAN_ADDRESS` to choose another). Reactivations and unpauses wait 600 seconds
+on the chain (`REGISTRY_DELAY_SECONDS`); this must not be longer than the backend's `ADMIN_ACTION_DELAY`.
+The guardian's actions (cancel a waiting request, pause, revoke, replace the operator) are run with
+`GUARDIAN_ACTION=… npx hardhat run scripts/guardian.js --network localhost`. The keys printed by
+`hardhat node` are public test keys: use them only on the local chain. Anywhere else the guardian must be a
+separate key, ideally a hardware wallet or a multisignature wallet.
 
 ### 4. Administrator wallet and second-step key
 
@@ -244,7 +250,8 @@ cd backend
 ```
 
 At startup the backend applies the migrations and checks the chain: the chain ID, that the contract
-address has code, and that the operator key is the contract's admin. It refuses to start on a mismatch.
+address has code, that the operator key is the contract's operator, and that the contract's delay is not
+longer than `ADMIN_ACTION_DELAY`. It refuses to start on a mismatch.
 
 ### 6. Frontend
 
@@ -278,13 +285,14 @@ frontend and the contracts project need none.
 | `BLOCKCHAIN_RPC_URL` | JSON-RPC endpoint (`http://127.0.0.1:8545` locally) | Yes |
 | `BLOCKCHAIN_CHAIN_ID` | Expected chain ID (`31337` locally) | Yes |
 | `CONTRACT_ADDRESS` | Deployed `WalletRegistry` address | Yes |
-| `BLOCKCHAIN_OPERATOR_PRIVATE_KEY` | Key of the contract's admin account; signs register, revoke and activate transactions | Yes |
+| `BLOCKCHAIN_OPERATOR_PRIVATE_KEY` | Key of the contract's operator; signs register, revoke, reactivation and pause transactions | Yes |
 | `BLOCKAUTH_ADMIN_WALLETS` | Comma-separated wallet addresses that receive the `ADMIN` role when they register | To have an administrator |
 | `APP_ORIGIN` | Exact origin of the web app (`http://localhost:5173` locally) | Yes |
 | `CHALLENGE_TTL_SECONDS` | Challenge lifetime, default `120` | No |
 | `SESSION_TIMEOUT` | Idle session timeout, default `30m` | No |
 | `SESSION_COOKIE_SECURE` | `Secure` cookie flag: `false` on `http://localhost`, `true` when deployed | No |
 | `SPRING_PROFILES_ACTIVE` | `dev`, `test` or `prod` (as a real environment variable) | No |
+| `TRUSTED_PROXIES` | Proxies allowed to report the client address in `X-Forwarded-For` (CIDR list), used when forwarded headers are on (`prod`, Docker Compose); default `127.0.0.1/32, ::1/128` | No |
 | `SECOND_STEP_ENCRYPTION_KEY` | 32 random bytes, Base64; encrypts authenticator secrets and keys the backup-code hashes | Yes |
 | `TRUSTED_DEVICE_DAYS` | Days a device stays trusted after passing the second step, default `30` | No |
 | `ADMIN_ACTION_DELAY` | Waiting period for delayed admin actions, default `10m` (between `1s` and `7d`) | No |
@@ -333,7 +341,8 @@ branch, and empty its tables before every test: never point `TEST_DB_*` at the a
 
 All endpoints are under `/api` on the same origin as the app. Requests and responses are JSON; every
 `POST` needs the `X-XSRF-TOKEN` header (the token comes from `GET /api/auth/csrf`). Errors use one
-standard body: `status`, `code`, `message`, `timestamp`, `path`, `errorId`, `fieldErrors`.
+standard body: `status`, `code`, `message`, `timestamp`, `path`, `errorId`, `fieldErrors`. The exception is a
+URL containing `%2F`, `%5C` or `%00`: the web server refuses it itself with a plain `400` page.
 
 **Authentication** (public unless noted)
 
@@ -385,8 +394,9 @@ standard body: `status`, `code`, `message`, `timestamp`, `path`, `errorId`, `fie
 | GET, POST | `/api/admin/api-keys` | List or create read-only API keys |
 | POST | `/api/admin/api-keys/{id}/revoke` | Revoke an API key |
 
-Revoke, activate, second-step reset, flags, the emergency stop, API-key creation and the user's own
-second-step changes require a `proof` (a fresh signature obtained through `/api/auth/step-up`).
+Revoke, activate, second-step reset, flags, the emergency stop, creating and revoking API keys, cancelling
+a waiting action and the user's own second-step changes require a `proof` (a fresh signature obtained
+through `/api/auth/step-up`).
 `GET /actuator/health` reports liveness without details.
 
 ## Database
@@ -399,6 +409,7 @@ Hibernate validating the entities against it at startup. Wallet addresses are st
 |---|---|
 | `V1__init_schema.sql` | `users`, `authentication_challenges`, `authentication_events`, `security_events` |
 | `V2__security_features.sql` | `devices`, `user_devices`, `user_sessions`, `sign_in_alerts`, `second_factors`, `backup_codes`, `wallet_flags`, `login_assessments`, `emergency_stop`, `admin_actions`, `api_keys` |
+| `V3__unexpected_chain_request.sql` | No new table: allows the security event `UNEXPECTED_CHAIN_REQUEST` |
 
 The contract stores only each wallet's status and registration time. Personal data (IP addresses, user
 agents) and all secrets stay off-chain. No secret is stored in plain form: device tokens and API keys are
@@ -416,12 +427,18 @@ stored as SHA-256 hashes, backup codes as keyed HMACs, and authenticator secrets
   JSON fields rejected, 16 KB body limit.
 - **Abuse:** rate limits of 10 challenge and 10 verification requests per minute per address and 120 other
   API requests per minute; 10 failed sign-ins in 15 minutes block the address for 15 minutes.
+- **Chain check:** every 15 seconds the backend reads the chain for each wallet with an open session, so a
+  wallet revoked outside the app (or by a transaction mined after the 30-second wait) is signed out.
 - **Fail closed:** if the blockchain or the database cannot answer, sign-in fails; if the trust check
   fails, the sign-in is never let through on the signature alone (it asks for the second step, or is
   refused when the wallet has none).
 - **Headers:** the API sends a restrictive Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`
   and `no-referrer`; the nginx frontend sends its own CSP.
-- **Contract:** only the admin account can change state; no payable functions, no external calls.
+- **Contract:** only the operator and the guardian can change state. Access is never restored at once:
+  reactivations and unpauses wait the contract's delay and can be cancelled; only the guardian can replace
+  the operator, which voids its waiting requests. No payable functions, no external calls.
+- **Unexpected chain requests:** every 15 seconds the backend cancels any waiting reactivation or unpause on
+  the chain that it did not request, and records `UNEXPECTED_CHAIN_REQUEST`.
 
 ## Deployment
 
@@ -429,7 +446,8 @@ No hosted deployment is configured. The repository provides:
 
 - **Docker Compose** for a complete local stack (see [Running with Docker](#running-with-docker)).
 - A **`prod` Spring profile** for running behind an HTTPS reverse proxy: it honours `X-Forwarded-*`
-  headers (so rate limits use the real client address and HSTS is sent) and forces `Secure` cookies.
+  headers (so rate limits use the real client address and HSTS is sent) and forces `Secure` cookies. Only
+  the proxies in `TRUSTED_PROXIES` (default: this machine) may set the client address.
 
 Any deployment outside `localhost` must use HTTPS. Take a database snapshot before applying new migrations
 to an existing database.
@@ -438,7 +456,7 @@ to an existing database.
 
 | Symptom | Cause and fix |
 |---|---|
-| Backend stops at startup with a blockchain error | Wrong chain ID, no contract code at `CONTRACT_ADDRESS`, or the operator key is not the contract admin. Usually the chain was restarted: deploy again and update `CONTRACT_ADDRESS`. If the node is simply down, the backend starts and answers 503 on chain-backed requests. |
+| Backend stops at startup with a blockchain error | Wrong chain ID, no contract code at `CONTRACT_ADDRESS`, the operator key is not the contract's operator, or the contract's delay is longer than `ADMIN_ACTION_DELAY`. Usually the chain was restarted: deploy again and update `CONTRACT_ADDRESS`. If the node is simply down, the backend starts and answers 503 on chain-backed requests. |
 | Backend stops naming `SECOND_STEP_ENCRYPTION_KEY` | The value is missing or not 32 bytes in Base64. Generate one as shown above. |
 | Login says the wallet is not registered although it was | The local chain was reset. Deploy again, empty the application tables on your development branch, restart the backend and register again. |
 | `Port 8080 was already in use` | Another program holds the port; the ports (5173, 8080, 8545, and 3000 with Docker) are fixed. |
@@ -463,8 +481,11 @@ TRUNCATE users, authentication_challenges, authentication_events, security_event
 - Single backend instance: sessions, rate-limit counters and pending second-step attempts live in memory
   and are lost on restart.
 - Sign-in alerts are shown in the app only; no e-mail or push notifications exist.
-- The emergency stop and the waiting period are enforced by the backend; whoever holds the operator key
-  can still call the contract directly.
+- A stolen operator key can still register wallets (while the contract is not paused) and revoke any
+  wallet at once; it cannot restore access without the on-chain delay. The guardian key must be kept
+  offline and separate: whoever holds both keys controls the registry.
+- A wallet revoked outside the app keeps its open sessions for up to about 15 seconds, until the next chain
+  check; its new sign-ins are refused at once.
 - Trust-score thresholds and penalties, and the default `ADMIN_ACTION_DELAY`, are starting values rather
   than tuned figures.
 - Supported browser: desktop Chrome with the MetaMask extension. Mobile is not supported.

@@ -1,5 +1,6 @@
 package com.blockauth.config;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.web.servlet.config.annotation.ContentNegotiationConfigurer;
@@ -13,7 +14,7 @@ public class WebConfig implements WebMvcConfigurer {
 	 * the standard JSON format instead of failing content negotiation for clients that ask for XML or HTML.
 	 */
 	@Override
-	public void configureContentNegotiation(ContentNegotiationConfigurer configurer) {
+	public void configureContentNegotiation(@NonNull ContentNegotiationConfigurer configurer) {
 		configurer.ignoreAcceptHeader(true).defaultContentType(MediaType.APPLICATION_JSON);
 	}
 

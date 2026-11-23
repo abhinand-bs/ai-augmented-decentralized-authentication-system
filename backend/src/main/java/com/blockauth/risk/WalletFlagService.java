@@ -3,6 +3,7 @@ package com.blockauth.risk;
 import java.time.Clock;
 import java.util.regex.Pattern;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -42,7 +43,7 @@ public class WalletFlagService {
 		this.clock = clock;
 	}
 
-	public Page<WalletFlag> list(Pageable pageable) {
+	public Page<WalletFlag> list(@NonNull Pageable pageable) {
 		return flags.findAll(pageable);
 	}
 

@@ -51,6 +51,21 @@ public final class Api {
 		return send("GET", path, null, Map.of(), true);
 	}
 
+	/** Only the status of a GET whose answer may not be JSON, e.g. a URL the web server refuses itself. */
+	public int status(String path) {
+		try {
+			return http.send(HttpRequest.newBuilder(URI.create(baseUrl + path)).GET().build(), BodyHandlers.discarding())
+				.statusCode();
+		}
+		catch (IOException e) {
+			throw new IllegalStateException(e);
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException(e);
+		}
+	}
+
 	/** POST a JSON body (a Map), or no body at all when {@code body} is null. */
 	public Response post(String path, Object body) {
 		return send("POST", path, body == null ? null : json(body), Map.of(), true);

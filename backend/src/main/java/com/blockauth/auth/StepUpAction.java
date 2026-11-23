@@ -14,6 +14,8 @@ public enum StepUpAction {
 	START_EMERGENCY_STOP("Switch on the emergency stop", true),
 	LIFT_EMERGENCY_STOP("Lift the emergency stop after the waiting period", true),
 	CREATE_API_KEY("Create a read-only API key", true),
+	REVOKE_API_KEY("Revoke the API key", true),
+	CANCEL_ADMIN_ACTION("Cancel the waiting administrator action", true),
 	ENABLE_SECOND_STEP("Turn on the second step for this wallet", false),
 	DISABLE_SECOND_STEP("Turn off the second step for this wallet", false),
 	RENEW_BACKUP_CODES("Replace the backup codes of this wallet", false);

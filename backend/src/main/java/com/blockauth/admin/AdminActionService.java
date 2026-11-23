@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -58,7 +59,7 @@ public class AdminActionService {
 	private static final Logger log = LoggerFactory.getLogger(AdminActionService.class);
 	private static final Duration RETRY_AFTER = Duration.ofMinutes(1);
 	private static final Set<ErrorCode> TEMPORARY = Set.of(ErrorCode.BLOCKCHAIN_UNAVAILABLE,
-			ErrorCode.BLOCKCHAIN_TIMEOUT, ErrorCode.DATABASE_UNAVAILABLE);
+			ErrorCode.BLOCKCHAIN_TIMEOUT, ErrorCode.DATABASE_UNAVAILABLE, ErrorCode.CHAIN_DELAY_PENDING);
 
 	private final AdminActionRepository actions;
 	private final AdminWalletService wallets;
@@ -88,7 +89,8 @@ public class AdminActionService {
 		stop.requireInactive();
 		String wallet = wallets.checkCanActivate(admin, address);
 		stepUp.verify(admin, StepUpAction.ACTIVATE_WALLET, StepUpDetails.wallet(wallet), proof, client);
-		return schedule(AdminAction.Type.ACTIVATE_WALLET, wallet, admin, client);
+		return scheduleWithChain(AdminAction.Type.ACTIVATE_WALLET, wallet, admin, client,
+				() -> wallets.requestActivationOnChain(wallet));
 	}
 
 	public ActionView requestSecondStepReset(BlockAuthPrincipal admin, String address, StepUpProof proof,
@@ -112,15 +114,25 @@ public class AdminActionService {
 			throw new BlockAuthException(ErrorCode.EMERGENCY_STOP_NOT_ACTIVE);
 		}
 		stepUp.verify(admin, StepUpAction.LIFT_EMERGENCY_STOP, StepUpDetails.none(), proof, client);
-		return schedule(AdminAction.Type.LIFT_EMERGENCY_STOP, null, admin, client);
+		return scheduleWithChain(AdminAction.Type.LIFT_EMERGENCY_STOP, null, admin, client, stop::requestUnpauseOnChain);
 	}
 
-	/** Any administrator may cancel a waiting action: cancelling never grants anything. */
-	public ActionView cancel(BlockAuthPrincipal admin, Long id, ClientInfo client) {
+	/**
+	 * Any administrator may cancel a waiting action. Cancelling grants nothing, but it can block a needed
+	 * reactivation or the lifting of the emergency stop, so it needs a fresh signature naming the action:
+	 * a stolen session alone cannot do it.
+	 */
+	public ActionView cancel(BlockAuthPrincipal admin, Long id, StepUpProof proof, ClientInfo client) {
 		AdminAction action = actions.findById(id).orElseThrow(() -> new BlockAuthException(ErrorCode.RESOURCE_NOT_FOUND));
+		// Checked before the signature, so that a request for a finished action does not use up a confirmation.
+		if (action.getStatus() != AdminAction.Status.PENDING) {
+			throw new BlockAuthException(ErrorCode.ADMIN_ACTION_NOT_PENDING);
+		}
+		stepUp.verify(admin, StepUpAction.CANCEL_ADMIN_ACTION, details(action), proof, client);
 		if (actions.cancel(id, admin.userId(), clock.instant()) == 0) {
 			throw new BlockAuthException(ErrorCode.ADMIN_ACTION_NOT_PENDING);
 		}
+		cancelOnChain(action);
 		audit.recordAuthEvent(AuthEventType.ACTION_CANCELLED, AuthEventStatus.SUCCESS, action.getTargetWallet(), null,
 				admin.userId(), null, client);
 		AdminAction cancelled = actions.findById(id).orElseThrow();
@@ -129,7 +141,18 @@ public class AdminActionService {
 			.orElse(Map.of()));
 	}
 
-	public PageResponse<ActionView> list(AdminAction.Status status, Pageable pageable) {
+	/** The text the confirming signature covers. @throws BlockAuthException RESOURCE_NOT_FOUND */
+	public String cancelDetails(Long id) {
+		return details(actions.findById(id).orElseThrow(() -> new BlockAuthException(ErrorCode.RESOURCE_NOT_FOUND)));
+	}
+
+	private static String details(AdminAction action) {
+		return "number " + action.getId() + " (" + action.getAction()
+				+ (action.getTargetWallet() == null ? "" : " for " + WalletAddresses.checksum(action.getTargetWallet()))
+				+ ")";
+	}
+
+	public PageResponse<ActionView> list(AdminAction.Status status, @NonNull Pageable pageable) {
 		Page<AdminAction> page = actions.findAll(Specs.<AdminAction>eq("status", status), pageable);
 		Map<UUID, String> requesters = users.findAllById(page.getContent().stream().map(AdminAction::getRequestedBy)
 			.collect(Collectors.toSet())).stream().collect(Collectors.toMap(User::getId, User::getWalletAddress));
@@ -206,6 +229,43 @@ public class AdminActionService {
 		secondStep.remove(target.getId());
 		audit.recordAuthEvent(AuthEventType.SECOND_STEP_RESET, AuthEventStatus.SUCCESS, wallet, target.getId(),
 				requester.getId(), null, new ClientInfo(null, null));
+	}
+
+	/**
+	 * Withdraws the chain's side of a cancelled action. If the chain cannot be reached now, the request left
+	 * there no longer matches a waiting action, and the chain status check cancels it on its next run.
+	 */
+	private void cancelOnChain(AdminAction action) {
+		try {
+			switch (action.getAction()) {
+				case ACTIVATE_WALLET -> wallets.cancelActivationOnChain(action.getTargetWallet());
+				case LIFT_EMERGENCY_STOP -> stop.cancelUnpauseOnChain();
+				case RESET_SECOND_STEP -> {
+					// Off-chain only.
+				}
+			}
+		}
+		catch (BlockAuthException e) {
+			log.warn("Cancelled action {} could not be withdrawn on the chain yet: {}", action.getId(), e.code());
+		}
+	}
+
+	/**
+	 * Records the request, then starts its waiting period on the chain. If the chain refuses, the request is
+	 * marked failed rather than left waiting for something that can never be carried out.
+	 */
+	private ActionView scheduleWithChain(AdminAction.Type type, String wallet, BlockAuthPrincipal admin,
+			ClientInfo client, Runnable onChain) {
+		ActionView view = schedule(type, wallet, admin, client);
+		try {
+			onChain.run();
+		}
+		catch (BlockAuthException e) {
+			actions.claim(view.id());
+			actions.finish(view.id(), AdminAction.Status.FAILED, e.code().name(), clock.instant());
+			throw e;
+		}
+		return view;
 	}
 
 	private ActionView schedule(AdminAction.Type type, String wallet, BlockAuthPrincipal admin, ClientInfo client) {

@@ -2,6 +2,7 @@ package com.blockauth.security;
 
 import java.io.IOException;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -33,7 +34,8 @@ public class RequestSizeLimitFilter extends OncePerRequestFilter {
 	}
 
 	@Override
-	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+			@NonNull FilterChain chain)
 			throws ServletException, IOException {
 		long declared = request.getContentLengthLong();
 		if (declared > MAX_BODY_BYTES) {

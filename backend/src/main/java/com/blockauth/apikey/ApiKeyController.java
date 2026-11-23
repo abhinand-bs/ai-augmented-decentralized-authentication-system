@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.blockauth.apikey.ApiKeyService.Created;
 import com.blockauth.apikey.ApiKeyService.KeyView;
+import com.blockauth.admin.AdminController.ProofBody;
 import com.blockauth.auth.StepUpProof;
 import com.blockauth.common.PageResponse;
 import com.blockauth.config.SecuritySettings;
@@ -57,9 +58,9 @@ public class ApiKeyController {
 	}
 
 	@PostMapping("/{id}/revoke")
-	KeyView revoke(@PathVariable UUID id, @AuthenticationPrincipal BlockAuthPrincipal admin,
-			HttpServletRequest request) {
-		return keys.revoke(admin, id, ClientInfoResolver.resolve(request));
+	KeyView revoke(@PathVariable UUID id, @Valid @RequestBody ProofBody body,
+			@AuthenticationPrincipal BlockAuthPrincipal admin, HttpServletRequest request) {
+		return keys.revoke(admin, id, body.proof(), ClientInfoResolver.resolve(request));
 	}
 
 }

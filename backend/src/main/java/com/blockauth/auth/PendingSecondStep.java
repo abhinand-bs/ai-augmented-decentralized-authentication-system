@@ -14,6 +14,8 @@ import jakarta.servlet.http.HttpSession;
  */
 final class PendingSecondStep implements Serializable {
 
+	private static final long serialVersionUID = 1L;
+
 	private static final String ATTRIBUTE = "BLOCKAUTH_PENDING_SECOND_STEP";
 	static final int MAX_ATTEMPTS = 5;
 
