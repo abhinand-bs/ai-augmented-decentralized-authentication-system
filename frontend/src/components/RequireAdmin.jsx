@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Alert } from './Alert';
 import { Spinner } from './Spinner';
@@ -9,8 +9,16 @@ import { Spinner } from './Spinner';
  */
 export function RequireAdmin() {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <Spinner label="Checking your session…" />;
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'ADMIN') return <Alert>You do not have permission to view this page.</Alert>;
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (user.role !== 'ADMIN') {
+    return (
+      <>
+        <h1>No permission</h1>
+        <Alert>You do not have permission to view this page.</Alert>
+      </>
+    );
+  }
   return <Outlet />;
 }

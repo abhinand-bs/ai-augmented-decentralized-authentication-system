@@ -1,32 +1,32 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, ErrorAlert } from '../components/Alert';
 import { SignChallengeFlow } from '../components/SignChallengeFlow';
 import { Spinner } from '../components/Spinner';
 import { TextField } from '../components/TextField';
 import { useAuth } from '../context/AuthContext';
+import { useSingleFlight } from '../api/useSingleFlight';
 import { formatDate } from '../utils/format';
 
 /** The verification code asked for when a sign-in does not look like this wallet's usual one. */
 function SecondStepForm({ until, onDone, onRestart }) {
   const { completeSecondStep } = useAuth();
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useSingleFlight();
   const [error, setError] = useState(null);
 
-  async function submit(event) {
+  function submit(event) {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      onDone(await completeSecondStep(code.trim()));
-    } catch (e) {
-      // Five wrong codes or five minutes end the attempt: the wallet has to sign again.
-      if (e.code === 'SECOND_STEP_EXPIRED') onRestart(e);
-      else setError(e);
-    } finally {
-      setBusy(false);
-    }
+    run('code', async () => {
+      setError(null);
+      try {
+        onDone(await completeSecondStep(code.trim()));
+      } catch (e) {
+        // Five wrong codes or five minutes end the attempt: the wallet has to sign again.
+        if (e.code === 'SECOND_STEP_EXPIRED') onRestart(e);
+        else setError(e);
+      }
+    });
   }
 
   return (
@@ -48,7 +48,7 @@ function SecondStepForm({ until, onDone, onRestart }) {
         hint="Six digits, or a backup code such as ABCD-EFGH."
       />
       <div className="actions">
-        <button className="button button-primary" type="submit" disabled={busy || code.trim().length < 6}>
+        <button className="button button-primary" type="submit" disabled={busy !== null || code.trim().length < 6}>
           {busy ? <Spinner label="Checking the code…" /> : 'Continue'}
         </button>
       </div>
@@ -60,12 +60,17 @@ function SecondStepForm({ until, onDone, onRestart }) {
 export function Login() {
   const { user, notice, login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [secondStepUntil, setSecondStepUntil] = useState(null);
   const [restartError, setRestartError] = useState(null);
 
   function go(me) {
     if (!me) throw new Error('The session could not be started.');
-    navigate(me.role === 'ADMIN' ? '/admin' : '/dashboard');
+    // Back to the page that asked for the sign-in, if it is one of ours and this role may see it.
+    const from = location.state?.from;
+    const allowed = typeof from === 'string' && from.startsWith('/') && !from.startsWith('//')
+      && !from.startsWith('/login') && (me.role === 'ADMIN' || !from.startsWith('/admin'));
+    navigate(allowed ? from : me.role === 'ADMIN' ? '/admin' : '/dashboard', { replace: true });
   }
 
   async function signIn(onStep) {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSingleFlight } from '../api/useSingleFlight';
 import { useAuth } from '../context/AuthContext';
 import { isMetaMaskAvailable } from '../wallet/metamask';
 import { Address } from './Address';
@@ -9,19 +10,19 @@ import { StatusBadge } from './StatusBadge';
 /** Connects MetaMask and shows which account is connected. Disabled when MetaMask is not installed. */
 export function WalletConnectButton() {
   const { walletAddress, connect } = useAuth();
-  const [connecting, setConnecting] = useState(false);
+  const { busy, run } = useSingleFlight();
+  const connecting = busy !== null;
   const [error, setError] = useState(null);
 
-  async function handleConnect() {
-    setError(null);
-    setConnecting(true);
-    try {
-      await connect();
-    } catch (e) {
-      setError(e);
-    } finally {
-      setConnecting(false);
-    }
+  function handleConnect() {
+    run('connect', async () => {
+      setError(null);
+      try {
+        await connect();
+      } catch (e) {
+        setError(e);
+      }
+    });
   }
 
   if (walletAddress) {
@@ -39,7 +40,7 @@ export function WalletConnectButton() {
       {!available && (
         <Alert kind="warn">
           MetaMask is required. Install it from{' '}
-          <a href="https://metamask.io" target="_blank" rel="noreferrer">
+          <a href="https://metamask.io" target="_blank" rel="noopener noreferrer">
             metamask.io
           </a>
           , then reload.

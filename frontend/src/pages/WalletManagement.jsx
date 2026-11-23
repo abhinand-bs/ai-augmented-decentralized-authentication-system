@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { withProof } from '../api/stepUp';
@@ -41,6 +41,7 @@ export function WalletManagement() {
 
   const [pending, setPending] = useState(null); // { wallet, action: 'revoke' | 'activate' }
   const [busy, setBusy] = useState(false);
+  const confirming = useRef(false);
   const [changed, setChanged] = useState(null);
   const [scheduled, setScheduled] = useState(null);
   const [error, setError] = useState(null);
@@ -79,6 +80,8 @@ export function WalletManagement() {
   }
 
   async function confirmChange() {
+    if (confirming.current) return;
+    confirming.current = true;
     setBusy(true);
     setError(null);
     setChanged(null);
@@ -96,6 +99,7 @@ export function WalletManagement() {
     } catch (e) {
       setError(e);
     } finally {
+      confirming.current = false;
       setBusy(false);
       setPending(null);
       users.reload();
@@ -208,6 +212,7 @@ export function WalletManagement() {
         page={users.data}
         loading={users.loading}
         error={users.error}
+        onRetry={users.reload}
         empty="No wallets match these filters."
         columns={[
           { key: 'walletAddress', header: 'Wallet', render: (row) => <Address value={row.walletAddress} /> },

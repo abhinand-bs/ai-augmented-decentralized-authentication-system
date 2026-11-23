@@ -4,8 +4,9 @@ import { Spinner } from './Spinner';
 /**
  * columns: [{ key, header, render?(row), wrap? }], where `wrap` marks free text that may wrap; page: a paged
  * API response. Loading, error and empty states are shown in place, so a page never has to branch on them.
+ * `onRetry` (optional) adds a "Try again" button to the error state.
  */
-export function DataTable({ columns, page, loading, error, empty, caption }) {
+export function DataTable({ columns, page, loading, error, empty, caption, onRetry }) {
   const rows = page?.items ?? [];
   return (
     <div className="table-wrap" aria-busy={loading}>
@@ -32,7 +33,7 @@ export function DataTable({ columns, page, loading, error, empty, caption }) {
           ))}
         </tbody>
       </table>
-      <ErrorAlert error={error} />
+      <ErrorAlert error={error} onRetry={onRetry} />
       {!error && loading && !rows.length && (
         <p className="table-note">
           <Spinner label="Loading…" />

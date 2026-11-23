@@ -37,6 +37,7 @@ export function History() {
         page={history.data}
         loading={history.loading}
         error={history.error}
+        onRetry={history.reload}
         empty="No authentication events yet."
         columns={[
           { key: 'occurredAt', header: 'Date', render: (row) => formatDate(row.occurredAt) },

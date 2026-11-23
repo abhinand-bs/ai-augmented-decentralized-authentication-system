@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '../api/client';
 import { withProof } from '../api/stepUp';
 import { useApi } from '../api/useApi';
@@ -10,11 +10,17 @@ import { TextField } from '../components/TextField';
 import { useAuth } from '../context/AuthContext';
 import { formatDate } from '../utils/format';
 
-/** Runs one action at a time for a section, keeping its busy flag and error. */
+/**
+ * Runs one action at a time for a section, keeping its busy flag and error. A ref guards it, so a double
+ * click sends one request even before the buttons re-render as disabled.
+ */
 function useAction() {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
+  const running = useRef(false);
   async function run(name, action) {
+    if (running.current) return undefined;
+    running.current = true;
     setBusy(name);
     setError(null);
     try {
@@ -23,6 +29,7 @@ function useAction() {
       setError(e);
       return undefined;
     } finally {
+      running.current = false;
       setBusy(null);
     }
   }
@@ -103,6 +110,7 @@ function Sessions({ sessions, onChange }) {
         page={asPage(sessions.data)}
         loading={sessions.loading}
         error={sessions.error}
+        onRetry={sessions.reload}
         empty="No open sessions."
         columns={[
           {
@@ -154,6 +162,7 @@ function Devices({ devices, onChange }) {
         page={asPage(devices.data)}
         loading={devices.loading}
         error={devices.error}
+        onRetry={devices.reload}
         empty="No devices yet."
         columns={[
           {

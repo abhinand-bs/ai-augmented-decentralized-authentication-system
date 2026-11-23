@@ -20,7 +20,7 @@ export function WalletStatus() {
         Read directly from the WalletRegistry smart contract. This on-chain record, not the BlockAuth database, decides
         whether a wallet may log in.
       </p>
-      <ErrorAlert error={status.error} />
+      <ErrorAlert error={status.error} onRetry={status.reload} />
       {status.loading && !data && <Spinner label="Reading the blockchain…" />}
       {data && (
         <dl className="facts">

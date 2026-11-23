@@ -6,6 +6,15 @@ import { connectWallet, onAccountsChanged } from '../wallet/metamask';
 
 const AuthContext = createContext(null);
 
+/** How often returning to the tab re-checks the session at most. */
+const RECHECK_INTERVAL_MS = 30_000;
+
+// Tabs of this app tell each other that the session changed, so they re-read it from the server. The message
+// carries no data at all: it is not storage, and nothing about the session leaves the HttpOnly cookie.
+function sessionChannel() {
+  return typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('blockauth-session');
+}
+
 // The session lives in an HttpOnly cookie the page cannot read. This context mirrors /api/users/me
 // in memory only: nothing about the session, role or wallet is ever written to web storage, and the
 // role shown here only decides what the navigation offers. The server authorizes every request.
@@ -16,9 +25,15 @@ export function AuthProvider({ children }) {
   const [notice, setNotice] = useState(null);
   const navigate = useNavigate();
   const userRef = useRef(null);
-  userRef.current = user;
+  const lastCheck = useRef(0);
+  const channel = useRef(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const refresh = useCallback(async () => {
+    lastCheck.current = Date.now();
     try {
       const me = await api.get('/api/users/me', { quiet: true });
       setUser(me);
@@ -30,6 +45,8 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
   }, []);
+
+  const announce = useCallback(() => channel.current?.postMessage('changed'), []);
 
   /** Asks MetaMask for the account to use. Proves nothing yet; ownership is proven by signing. */
   const connect = useCallback(async () => {
@@ -48,9 +65,11 @@ export function AuthProvider({ children }) {
       if (result?.status === 'SECOND_STEP_REQUIRED') return { secondStepUntil: result.expiresAt };
       setNotice(null);
       await ensureCsrfToken();
-      return { user: await refresh() };
+      const me = await refresh();
+      announce();
+      return { user: me };
     },
-    [walletAddress, refresh],
+    [walletAddress, refresh, announce],
   );
 
   /** Finishes a sign-in that is waiting for its second step. Must run in the browser that signed. */
@@ -59,9 +78,11 @@ export function AuthProvider({ children }) {
       await api.post('/api/auth/second-step', { code });
       setNotice(null);
       await ensureCsrfToken();
-      return refresh();
+      const me = await refresh();
+      announce();
+      return me;
     },
-    [refresh],
+    [refresh, announce],
   );
 
   const logout = useCallback(
@@ -73,15 +94,45 @@ export function AuthProvider({ children }) {
       }
       setUser(null);
       setNotice(message);
+      announce();
       ensureCsrfToken().catch(() => {});
       navigate(message ? '/login' : '/');
     },
-    [navigate],
+    [navigate, announce],
   );
-
+  const logoutRef = useRef(logout);
   useEffect(() => {
-    ensureCsrfToken().catch(() => {});
-    refresh();
+    logoutRef.current = logout;
+  }, [logout]);
+
+  // Bootstrap: read the session once, and listen for other tabs.
+  useEffect(() => {
+    ensureCsrfToken()
+      .catch(() => {})
+      .then(refresh);
+    channel.current = sessionChannel();
+    if (channel.current) channel.current.onmessage = () => refresh();
+    return () => {
+      channel.current?.close();
+      channel.current = null;
+    };
+  }, [refresh]);
+
+  // Coming back to the tab after a while: the session may have timed out or been ended elsewhere.
+  useEffect(() => {
+    const recheck = () => {
+      if (document.visibilityState !== 'visible' || !userRef.current) return;
+      if (Date.now() - lastCheck.current < RECHECK_INTERVAL_MS) return;
+      refresh().then((me) => {
+        if (!me) setNotice('Your session has expired or was ended. Please sign in again.');
+      });
+    };
+    document.addEventListener('visibilitychange', recheck);
+    window.addEventListener('focus', recheck);
+    return () => {
+      document.removeEventListener('visibilitychange', recheck);
+      window.removeEventListener('focus', recheck);
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -100,6 +151,8 @@ export function AuthProvider({ children }) {
     return () => configureApi({ onSessionEnded: () => {}, onAccessDenied: () => {} });
   }, [navigate, refresh]);
 
+  // Registered once for the lifetime of the app. A network (chain) switch in MetaMask needs no handling:
+  // signing a message does not depend on the network, and the server checks the registry on its own chain.
   useEffect(
     () =>
       onAccountsChanged((accounts) => {
@@ -108,10 +161,11 @@ export function AuthProvider({ children }) {
         const current = userRef.current;
         // The session belongs to one wallet. If MetaMask now shows another (or none), end it.
         if (current && next?.toLowerCase() !== current.walletAddress.toLowerCase()) {
-          logout('Wallet changed — you have been signed out.');
+          userRef.current = null; // a second event before the re-render must not log out twice
+          logoutRef.current('Wallet changed — you have been signed out.');
         }
       }),
-    [logout],
+    [],
   );
 
   const value = useMemo(

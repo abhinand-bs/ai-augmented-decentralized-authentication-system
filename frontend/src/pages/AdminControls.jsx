@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { withProof } from '../api/stepUp';
 import { query, useApi } from '../api/useApi';
@@ -26,7 +26,11 @@ function useAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  // A ref, not the state: a double click must not start a second request before the re-render.
+  const running = useRef(false);
   async function run(action) {
+    if (running.current) return null;
+    running.current = true;
     setBusy(true);
     setError(null);
     setResult(null);
@@ -38,6 +42,7 @@ function useAction() {
       setError(e);
       return null;
     } finally {
+      running.current = false;
       setBusy(false);
     }
   }
@@ -176,6 +181,7 @@ function WaitingActions({ version }) {
         page={actions.data}
         loading={actions.loading}
         error={actions.error}
+        onRetry={actions.reload}
         empty="Nothing here."
         columns={[
           { key: 'action', header: 'Action', render: (row) => label(row.action) },
@@ -261,6 +267,7 @@ function FlaggedWallets() {
         page={rows}
         loading={flags.loading}
         error={flags.error}
+        onRetry={flags.reload}
         empty="No wallets are flagged."
         columns={[
           { key: 'walletAddress', header: 'Wallet', render: (row) => <Address value={row.walletAddress} /> },
@@ -400,6 +407,7 @@ function ApiKeys() {
         page={keys.data}
         loading={keys.loading}
         error={keys.error}
+        onRetry={keys.reload}
         empty="No API keys."
         columns={[
           { key: 'name', header: 'Name' },

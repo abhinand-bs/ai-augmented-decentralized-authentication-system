@@ -23,5 +23,13 @@ export function label(value) {
 }
 
 export function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' }) : '';
+  // The server sends UTC; this shows the browser's local time with its zone, so two people comparing
+  // screens in different places can tell the times apart.
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZoneName: 'short',
+  });
 }

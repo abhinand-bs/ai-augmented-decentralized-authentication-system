@@ -68,6 +68,7 @@ function SecurityEvents() {
         page={events.data}
         loading={events.loading}
         error={events.error}
+        onRetry={events.reload}
         empty="No security events recorded."
         columns={[
           { key: 'occurredAt', header: 'Time', render: (row) => formatDate(row.occurredAt) },
@@ -107,6 +108,7 @@ function AuthenticationEvents() {
         page={events.data}
         loading={events.loading}
         error={events.error}
+        onRetry={events.reload}
         empty="No authentication events yet."
         columns={[
           { key: 'occurredAt', header: 'Time', render: (row) => formatDate(row.occurredAt) },
@@ -164,6 +166,7 @@ function SignInRisk() {
         page={assessments.data}
         loading={assessments.loading}
         error={assessments.error}
+        onRetry={assessments.reload}
         empty="No sign-ins scored yet."
         columns={[
           { key: 'assessedAt', header: 'Time', render: (row) => formatDate(row.assessedAt) },

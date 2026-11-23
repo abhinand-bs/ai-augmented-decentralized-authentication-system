@@ -1,5 +1,5 @@
 import { signMessage } from '../wallet/metamask';
-import { api } from './client';
+import { api, CHAIN_TIMEOUT_MS } from './client';
 
 const ENDPOINTS = {
   register: { challenge: '/api/auth/register/challenge', submit: '/api/auth/register' },
@@ -21,5 +21,7 @@ export async function signAndSubmit(kind, walletAddress, onStep) {
   onStep({ phase: 'signing', challenge: issued.challenge, expiresAt: issued.expiresAt });
   const signature = await signMessage(issued.challenge, walletAddress);
   onStep({ phase: 'submitting' });
-  return api.post(endpoints.submit, { walletAddress, challenge: issued.challenge, signature });
+  // Registration writes to the blockchain and waits for the receipt, so it gets a longer time limit.
+  const options = kind === 'register' ? { timeoutMs: CHAIN_TIMEOUT_MS } : undefined;
+  return api.post(endpoints.submit, { walletAddress, challenge: issued.challenge, signature }, options);
 }

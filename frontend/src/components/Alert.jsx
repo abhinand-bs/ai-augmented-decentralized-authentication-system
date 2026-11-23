@@ -22,7 +22,7 @@ const NEXT_PAGE = {
  * An error in plain language, what to do about it, and the technical details (code, HTTP status and,
  * for unexpected server errors, the reference to quote) for whoever has to investigate.
  */
-export function ErrorAlert({ error }) {
+export function ErrorAlert({ error, onRetry }) {
   if (!error) return null;
   const hint = hintFor(error);
   const next = NEXT_PAGE[error.code];
@@ -32,6 +32,13 @@ export function ErrorAlert({ error }) {
         {messageFor(error)} {next && <Link to={next.to}>{next.text}</Link>}
       </p>
       {hint && <p>{hint}</p>}
+      {onRetry && (
+        <p>
+          <button type="button" className="button button-small" onClick={onRetry}>
+            Try again
+          </button>
+        </p>
+      )}
       {error instanceof ApiError && error.status > 0 && (
         <details>
           <summary>Technical details</summary>

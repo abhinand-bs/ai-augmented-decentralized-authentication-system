@@ -9,24 +9,24 @@ import { NavBar } from './NavBar';
 function SignInAlertBanner() {
   const { user } = useAuth();
   const { pathname } = useLocation();
-  const [count, setCount] = useState(0);
+  // The count belongs to the user it was read for, so a signed-out page never shows another user's banner.
+  const [seen, setSeen] = useState({ userId: null, count: 0 });
+  const userId = user?.id ?? null;
 
   useEffect(() => {
-    let current = true;
-    if (!user) {
-      setCount(0);
-      return undefined;
-    }
-    api.get('/api/users/alerts', { quiet: true }).then(
-      (alerts) => current && setCount(alerts.length),
-      () => current && setCount(0),
+    if (!userId) return undefined;
+    const controller = new AbortController();
+    api.get('/api/users/alerts', { quiet: true, signal: controller.signal }).then(
+      (alerts) => setSeen({ userId, count: alerts.length }),
+      () => {
+        if (!controller.signal.aborted) setSeen({ userId, count: 0 });
+      },
     );
-    return () => {
-      current = false;
-    };
-  }, [user, pathname]);
+    return () => controller.abort();
+  }, [userId, pathname]);
 
-  if (!count || pathname === '/security') return null;
+  const count = seen.userId === userId ? seen.count : 0;
+  if (!userId || !count || pathname === '/security') return null;
   return (
     <Alert kind="warn">
       Your wallet signed in on a new device. <Link to="/security">Check whether it was you</Link>.

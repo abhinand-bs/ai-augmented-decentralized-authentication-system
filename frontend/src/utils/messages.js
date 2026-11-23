@@ -5,7 +5,7 @@ const TRY_NEW_MESSAGE = 'Each sign-in message works once. Start again to get a n
 const CHECK_ACCOUNT = 'Make sure MetaMask is on the same account you connected here, then try again.';
 
 // What happened, in plain language, for each error code the server can return.
-const MESSAGES = {
+export const MESSAGES = {
   CHALLENGE_EXPIRED: 'The sign-in request expired. Please try again.',
   CHALLENGE_ALREADY_USED: 'This sign-in request is no longer valid. Please try again.',
   INVALID_CHALLENGE: 'This sign-in request is no longer valid. Please try again.',
@@ -42,7 +42,16 @@ const MESSAGES = {
   ADMIN_ACTION_NOT_PENDING: 'This request is no longer waiting.',
   RESOURCE_NOT_FOUND: 'This item no longer exists.',
   INTERNAL_ERROR: 'An unexpected error occurred.',
+  VALIDATION_FAILED: 'Some of the information sent was not valid.',
+  MALFORMED_REQUEST: 'The request was not understood. Reload the page and try again.',
+  METHOD_NOT_ALLOWED: 'The request was not understood. Reload the page and try again.',
+  UNSUPPORTED_MEDIA_TYPE: 'The request was not understood. Reload the page and try again.',
+  PAYLOAD_TOO_LARGE: 'The request was too large.',
+  INVALID_API_KEY: 'The API key is missing, invalid, expired or revoked.',
+  CSRF_INVALID: 'The request could not be verified. Reload the page and try again.',
+  CHAIN_REQUEST_MISSING: 'The blockchain no longer holds this request: it was cancelled there.',
   NETWORK: 'Cannot reach the server.',
+  TIMEOUT: 'The server did not answer in time.',
 };
 
 // What the person can do next. Shown under the message when there is something useful to say.
@@ -63,6 +72,7 @@ const HINTS = {
   EMERGENCY_STOP_ACTIVE: 'An administrator has paused changes while a security problem is handled. Try again later.',
   INTERNAL_ERROR: 'If this keeps happening, give the reference under "Technical details" to an administrator.',
   NETWORK: 'Check that you are online and that the BlockAuth server is running.',
+  TIMEOUT: 'It may still have gone through. Check the result (for example your history) before trying again.',
 };
 
 function isAddressError(error) {
