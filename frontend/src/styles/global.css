@@ -739,7 +739,8 @@ progress::-moz-progress-bar {
 }
 
 select,
-input[type='text'] {
+input[type='text'],
+input[type='email'] {
   min-height: var(--control-height);
   padding: 0 0.75rem;
   border: 1px solid var(--control-border);
@@ -754,7 +755,8 @@ select {
   min-width: 12rem;
 }
 
-input[type='text'] {
+input[type='text'],
+input[type='email'] {
   width: min(27rem, calc(100vw - 3rem));
   font-family: var(--mono);
   font-size: 0.8125rem;

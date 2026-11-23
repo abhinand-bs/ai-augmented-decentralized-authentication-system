@@ -318,7 +318,7 @@ refused by the session check instead. The request is refused either way, and the
 
 What was **not** run, and why (first round; the Postman collection was run on 24 October, see above):
 
-- **Postman collection (84 requests):** it needs a running stack and session cookies copied from a
+- **Postman collection (84 requests at the time; 99 since November 2026):** it needs a running stack and session cookies copied from a
   browser. Not run in the first round.
 - **OWASP ZAP:** not run again. The earlier results are in `security-tests/zap/README.md`: no High or
   Medium alerts, last run 19 October 2026.
