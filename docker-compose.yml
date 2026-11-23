@@ -50,6 +50,33 @@ services:
       backend:
         condition: service_healthy
 
+  # Optional shared state for several backend instances: docker compose --profile redis ... (see
+  # docker-compose.redis.yml). Published on this machine only, on 6380 (6379 is often taken), and
+  # password-protected: REDIS_PASSWORD must be set in the shell or in .env.local.
+  redis:
+    image: redis:7.4-alpine
+    profiles: ["redis"]
+    # Refuses to start without a password (checked in the container, so the default stack never needs one).
+    command: ["sh", "-c", "[ -n \"$$REDIS_PASSWORD\" ] || { echo 'set REDIS_PASSWORD' >&2; exit 1; }; exec redis-server --requirepass \"$$REDIS_PASSWORD\" --save '' --appendonly no"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+
+  # Optional mail catcher for the e-mail alerts in development: docker compose --profile mail up.
+  # SMTP on 127.0.0.1:1025, web inbox on http://127.0.0.1:8025. Never use it for real mail.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    profiles: ["mail"]
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
 networks:
   default:
     ipam:

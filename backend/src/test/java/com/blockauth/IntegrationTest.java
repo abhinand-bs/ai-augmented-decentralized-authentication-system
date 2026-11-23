@@ -40,7 +40,7 @@ import com.blockauth.blockchain.OnChainWalletStatus;
 import com.blockauth.blockchain.WalletRegistryClient;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.ErrorCode;
-import com.blockauth.security.InMemoryRateLimiter;
+import com.blockauth.security.RateLimiter;
 
 import tools.jackson.databind.JsonNode;
 
@@ -90,7 +90,7 @@ public abstract class IntegrationTest {
 	protected JdbcTemplate jdbc;
 
 	@Autowired
-	protected InMemoryRateLimiter rateLimiter;
+	protected RateLimiter rateLimiter;
 
 	@Autowired
 	protected MutableClock clock;

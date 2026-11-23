@@ -17,13 +17,20 @@ public class ChallengeCleanupJob {
 
 	private final AuthenticationChallengeRepository challenges;
 	private final Clock clock;
+	private final com.blockauth.common.JobLock jobs;
 
-	public ChallengeCleanupJob(AuthenticationChallengeRepository challenges, Clock clock) {
+	public ChallengeCleanupJob(AuthenticationChallengeRepository challenges, Clock clock,
+			com.blockauth.common.JobLock jobs) {
+		this.jobs = jobs;
 		this.challenges = challenges;
 		this.clock = clock;
 	}
 
 	@Scheduled(cron = "0 0 * * * *")
+	public void scheduledRun() {
+		jobs.runExclusive("challenge-cleanup", Duration.ofMinutes(10), this::deleteExpiredChallenges);
+	}
+
 	public void deleteExpiredChallenges() {
 		int deleted = challenges.deleteExpiredBefore(clock.instant().minus(RETENTION_AFTER_EXPIRY));
 		if (deleted > 0) {

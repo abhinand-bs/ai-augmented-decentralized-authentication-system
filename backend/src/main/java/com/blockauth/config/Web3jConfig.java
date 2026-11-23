@@ -2,13 +2,14 @@ package com.blockauth.config;
 
 import java.time.Duration;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.http.HttpService;
 
 import com.blockauth.blockchain.ChainWriteLock;
+import com.blockauth.common.JobLock;
 
 import okhttp3.OkHttpClient;
 
@@ -24,11 +25,18 @@ public class Web3jConfig {
 		return Web3j.build(new HttpService(properties.blockchain().rpcUrl(), client));
 	}
 
-	/** One instance: the chain client's own lock serializes its writes. With Redis, a shared lease replaces this. */
+	/** One instance: the chain client's own lock serializes its writes. With Redis, RedisLeases replaces this. */
 	@Bean
-	@ConditionalOnMissingBean
+	@ConditionalOnProperty(name = "blockauth.redis.enabled", havingValue = "false", matchIfMissing = true)
 	ChainWriteLock chainWriteLock() {
 		return ChainWriteLock.NONE;
+	}
+
+	/** One instance: every scheduled job simply runs. With Redis, RedisLeases replaces this. */
+	@Bean
+	@ConditionalOnProperty(name = "blockauth.redis.enabled", havingValue = "false", matchIfMissing = true)
+	JobLock jobLock() {
+		return JobLock.LOCAL;
 	}
 
 }

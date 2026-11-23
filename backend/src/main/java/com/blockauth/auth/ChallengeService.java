@@ -16,7 +16,7 @@ import com.blockauth.audit.AuthEventType;
 import com.blockauth.audit.ClientInfo;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.ErrorCode;
-import com.blockauth.security.InMemoryRateLimiter;
+import com.blockauth.security.RateLimiter;
 
 @Service
 public class ChallengeService {
@@ -25,13 +25,13 @@ public class ChallengeService {
 
 	private final AuthenticationChallengeRepository challenges;
 	private final ChallengeMessageFactory factory;
-	private final InMemoryRateLimiter limiter;
+	private final RateLimiter limiter;
 	private final AuditService audit;
 	private final Clock clock;
 	private final TransactionTemplate newTransaction;
 
 	public ChallengeService(AuthenticationChallengeRepository challenges, ChallengeMessageFactory factory,
-			InMemoryRateLimiter limiter, AuditService audit, Clock clock,
+			RateLimiter limiter, AuditService audit, Clock clock,
 			@NonNull PlatformTransactionManager transactionManager) {
 		this.challenges = challenges;
 		this.factory = factory;
@@ -46,7 +46,7 @@ public class ChallengeService {
 	public AuthenticationChallenge issue(String wallet, ChallengePurpose purpose, ClientInfo client) {
 		// Counted per wallet and client address together. Counted per wallet alone, anyone could use up
 		// a wallet's allowance and keep its owner from signing in.
-		InMemoryRateLimiter.Decision decision = limiter.acquire("challenge-wallet", wallet + '|' + client.ip(),
+		RateLimiter.Decision decision = limiter.acquire("challenge-wallet", wallet + '|' + client.ip(),
 				MAX_PER_WALLET_PER_MINUTE, Duration.ofMinutes(1));
 		if (!decision.allowed()) {
 			AuthEventType type = purpose == ChallengePurpose.REGISTRATION ? AuthEventType.REGISTRATION
@@ -72,7 +72,7 @@ public class ChallengeService {
 	 * and belongs to one session: it is useless for anything else.
 	 */
 	public AuthenticationChallenge issueForAction(String wallet, UUID sessionId, StepUpAction action, String details) {
-		InMemoryRateLimiter.Decision decision = limiter.acquire("step-up", wallet, MAX_PER_WALLET_PER_MINUTE * 2,
+		RateLimiter.Decision decision = limiter.acquire("step-up", wallet, MAX_PER_WALLET_PER_MINUTE * 2,
 				Duration.ofMinutes(1));
 		if (!decision.allowed()) {
 			throw new BlockAuthException(ErrorCode.RATE_LIMITED, decision.retryAfterSeconds());

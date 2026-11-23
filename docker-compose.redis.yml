@@ -1,0 +1,17 @@
+# Several backend instances sharing sessions, rate limits and locks through Redis, behind nginx:
+#
+#   docker compose --profile redis -f docker-compose.yml -f docker-compose.redis.yml up --build --scale backend=2
+#
+# REDIS_PASSWORD must be set (shell or .env.local). The backend's host port is not published here (two instances
+# cannot both own 127.0.0.1:8080); reach the app through nginx on http://localhost:3000.
+services:
+  backend:
+    ports: !reset []
+    environment:
+      SPRING_PROFILES_ACTIVE: "dev,redis"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy

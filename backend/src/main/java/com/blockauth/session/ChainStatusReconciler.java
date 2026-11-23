@@ -1,6 +1,7 @@
 package com.blockauth.session;
 
 import java.time.Clock;
+import java.time.Duration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ import com.blockauth.audit.AuthEventType;
 import com.blockauth.audit.ClientInfo;
 import com.blockauth.blockchain.OnChainWalletStatus;
 import com.blockauth.common.BlockAuthException;
+import com.blockauth.common.JobLock;
 import com.blockauth.user.User;
 import com.blockauth.user.UserService;
 
@@ -35,8 +37,11 @@ public class ChainStatusReconciler {
 	private final UserService users;
 	private final AuditService audit;
 	private final Clock clock;
+	private final JobLock jobs;
 
-	public ChainStatusReconciler(UserSessionRepository sessions, UserService users, AuditService audit, Clock clock) {
+	public ChainStatusReconciler(UserSessionRepository sessions, UserService users, AuditService audit, Clock clock,
+			JobLock jobs) {
+		this.jobs = jobs;
 		this.sessions = sessions;
 		this.users = users;
 		this.audit = audit;
@@ -46,6 +51,10 @@ public class ChainStatusReconciler {
 	// ponytail: one chain read per signed-in wallet and run; poll the contract's events instead if the
 	// number of open sessions grows large.
 	@Scheduled(cron = "${blockauth.chain-sync.schedule:*/15 * * * * *}")
+	public void scheduledRun() {
+		jobs.runExclusive("chain-status", Duration.ofMinutes(5), this::reconcile);
+	}
+
 	public void reconcile() {
 		for (User user : sessions.findUsersWithOpenSessions()) {
 			OnChainWalletStatus chain;

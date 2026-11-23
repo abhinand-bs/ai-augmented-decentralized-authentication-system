@@ -1,0 +1,25 @@
+# Shared state between instances (SPRING_PROFILES_ACTIVE=...,redis): sessions, rate limits, the IP block, the lease
+# that serializes chain writes, and the lease that runs each scheduled job on one instance at a time.
+# Redis must be private (never published beyond localhost or a private network), password-protected, and
+# reached over TLS anywhere outside this machine (REDIS_SSL=true).
+spring:
+  autoconfigure:
+    exclude: []
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6380}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      timeout: 2s
+      connect-timeout: 2s
+  session:
+    timeout: ${SESSION_TIMEOUT:30m}
+    redis:
+      namespace: "blockauth:session"
+      flush-mode: on-save
+
+blockauth:
+  redis:
+    enabled: true

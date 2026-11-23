@@ -16,7 +16,7 @@ import com.blockauth.audit.AuditService;
 import com.blockauth.common.ApiErrorWriter;
 import com.blockauth.common.ErrorCode;
 import com.blockauth.security.ClientInfoResolver;
-import com.blockauth.security.InMemoryRateLimiter;
+import com.blockauth.security.RateLimiter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -34,10 +34,10 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
 	private final ApiKeyService keys;
 	private final AuditService audit;
-	private final InMemoryRateLimiter limiter;
+	private final RateLimiter limiter;
 	private final ApiErrorWriter errors;
 
-	public ApiKeyFilter(ApiKeyService keys, AuditService audit, InMemoryRateLimiter limiter, ApiErrorWriter errors) {
+	public ApiKeyFilter(ApiKeyService keys, AuditService audit, RateLimiter limiter, ApiErrorWriter errors) {
 		this.keys = keys;
 		this.audit = audit;
 		this.limiter = limiter;

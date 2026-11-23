@@ -30,7 +30,7 @@ import com.blockauth.common.Tokens;
 import com.blockauth.common.WalletAddresses;
 import com.blockauth.config.SecuritySettings;
 import com.blockauth.security.BlockAuthPrincipal;
-import com.blockauth.security.InMemoryRateLimiter;
+import com.blockauth.security.RateLimiter;
 import com.blockauth.session.SessionRegistry;
 
 /**
@@ -60,7 +60,7 @@ public class SecondStepService {
 	private final StepUpService stepUp;
 	private final SessionRegistry sessions;
 	private final AuditService audit;
-	private final InMemoryRateLimiter limiter;
+	private final RateLimiter limiter;
 	private final SecretBox box;
 	private final byte[] backupCodeKey;
 	private final Clock clock;
@@ -68,7 +68,7 @@ public class SecondStepService {
 	private final SecureRandom random = new SecureRandom();
 
 	public SecondStepService(SecondFactorRepository factors, BackupCodeRepository backupCodes, StepUpService stepUp,
-			SessionRegistry sessions, AuditService audit, InMemoryRateLimiter limiter, SecuritySettings settings,
+			SessionRegistry sessions, AuditService audit, RateLimiter limiter, SecuritySettings settings,
 			Clock clock, @NonNull PlatformTransactionManager transactionManager) {
 		this.factors = factors;
 		this.backupCodes = backupCodes;
@@ -196,7 +196,7 @@ public class SecondStepService {
 	}
 
 	private void throttle(UUID userId) {
-		InMemoryRateLimiter.Decision decision = limiter.acquire("second-step-code", userId.toString(), CODE_ATTEMPTS,
+		RateLimiter.Decision decision = limiter.acquire("second-step-code", userId.toString(), CODE_ATTEMPTS,
 				CODE_WINDOW);
 		if (!decision.allowed()) {
 			throw new BlockAuthException(ErrorCode.RATE_LIMITED, decision.retryAfterSeconds());

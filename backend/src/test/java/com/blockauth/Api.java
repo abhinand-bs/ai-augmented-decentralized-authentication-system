@@ -39,6 +39,10 @@ public final class Api {
 	private final HttpClient http = HttpClient.newHttpClient();
 	private final String baseUrl;
 
+	public String baseUrl() {
+		return baseUrl;
+	}
+
 	public Api(String baseUrl) {
 		this.baseUrl = baseUrl;
 	}

@@ -26,8 +26,11 @@ public class RetentionJob {
 	private final JdbcTemplate jdbc;
 	private final Clock clock;
 	private final int days;
+	private final com.blockauth.common.JobLock jobs;
 
-	public RetentionJob(JdbcTemplate jdbc, Clock clock, @Value("${blockauth.retention.days:0}") int days) {
+	public RetentionJob(JdbcTemplate jdbc, Clock clock, @Value("${blockauth.retention.days:0}") int days,
+			com.blockauth.common.JobLock jobs) {
+		this.jobs = jobs;
 		if (days < 0) {
 			throw new IllegalArgumentException("RETENTION_DAYS must be 0 (keep everything) or a positive number of days");
 		}
@@ -39,7 +42,7 @@ public class RetentionJob {
 	@Scheduled(cron = "${blockauth.retention.schedule:0 15 4 * * *}")
 	public void run() {
 		if (days > 0) {
-			purgeOlderThan(days);
+			jobs.runExclusive("retention", Duration.ofHours(1), () -> purgeOlderThan(days));
 		}
 	}
 

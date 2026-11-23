@@ -67,6 +67,13 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
 	@Query("update UserSession s set s.endedAt = :now, s.endReason = :reason where s.endedAt is null")
 	int endAllOpen(@Param("reason") SessionEndReason reason, @Param("now") Instant now);
 
+	@Transactional
+	@Modifying
+	@Query("update UserSession s set s.endedAt = :now, s.endReason = :reason where s.endedAt is null "
+			+ "and s.lastSeenAt < :idleSince")
+	int endIdleSince(@Param("idleSince") Instant idleSince, @Param("reason") SessionEndReason reason,
+			@Param("now") Instant now);
+
 	/** Records activity at most once per period, not on every request. */
 	@Transactional
 	@Modifying

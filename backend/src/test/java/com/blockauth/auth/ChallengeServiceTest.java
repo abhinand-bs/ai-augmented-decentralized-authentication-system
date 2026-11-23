@@ -137,7 +137,7 @@ class ChallengeServiceTest {
 
 	@Test
 	void cleanupJobDeletesChallengesExpiredMoreThanADayAgo() {
-		new ChallengeCleanupJob(repository, clock).deleteExpiredChallenges();
+		new ChallengeCleanupJob(repository, clock, com.blockauth.common.JobLock.LOCAL).deleteExpiredChallenges();
 
 		verify(repository).deleteExpiredBefore(clock.instant().minus(Duration.ofHours(24)));
 	}

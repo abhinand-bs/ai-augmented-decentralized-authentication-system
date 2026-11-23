@@ -32,6 +32,7 @@ public class ChainRequestGuard {
 	private final AdminActionRepository actions;
 	private final EmergencyStopService stop;
 	private final AuditService audit;
+	private final com.blockauth.common.JobLock jobs;
 
 	/** The first block not scanned yet. 0 at startup, so the whole chain is checked once. */
 	private long nextBlock;
@@ -39,7 +40,8 @@ public class ChainRequestGuard {
 	private final Set<String> watched = new LinkedHashSet<>();
 
 	public ChainRequestGuard(WalletRegistryClient registry, AdminActionRepository actions, EmergencyStopService stop,
-			AuditService audit) {
+			AuditService audit, com.blockauth.common.JobLock jobs) {
+		this.jobs = jobs;
 		this.registry = registry;
 		this.actions = actions;
 		this.stop = stop;
@@ -49,6 +51,10 @@ public class ChainRequestGuard {
 	// ponytail: scans the event log from block 0 after every restart; fine for a local chain, but on a
 	// public network start from the contract's deployment block instead.
 	@Scheduled(cron = "${blockauth.chain-sync.schedule:*/15 * * * * *}")
+	public void scheduledRun() {
+		jobs.runExclusive("chain-request-guard", java.time.Duration.ofMinutes(5), this::check);
+	}
+
 	public synchronized void check() {
 		try {
 			long latest = registry.blockNumber();

@@ -28,7 +28,7 @@ import com.blockauth.audit.AuditService;
 import com.blockauth.common.ApiErrorWriter;
 import com.blockauth.common.ErrorCode;
 import com.blockauth.security.ActiveUserFilter;
-import com.blockauth.security.InMemoryRateLimiter;
+import com.blockauth.security.RateLimiter;
 import com.blockauth.security.OriginCheckFilter;
 import com.blockauth.security.RateLimitFilter;
 import com.blockauth.security.RestAccessDeniedHandler;
@@ -68,7 +68,7 @@ public class SecurityConfig {
 	SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository securityContextRepository,
 			CookieCsrfTokenRepository csrfTokenRepository, RestAuthenticationEntryPoint authenticationEntryPoint,
 			RestAccessDeniedHandler accessDeniedHandler, ApiErrorWriter errors, AuditService audit,
-			InMemoryRateLimiter rateLimiter, UserSessionRepository sessions, ApiKeyService apiKeys,
+			RateLimiter rateLimiter, UserSessionRepository sessions, ApiKeyService apiKeys,
 			BlockAuthProperties properties, Clock clock) throws Exception {
 		http
 			.authorizeHttpRequests(auth -> auth

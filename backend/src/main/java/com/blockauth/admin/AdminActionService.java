@@ -30,6 +30,7 @@ import com.blockauth.auth.StepUpProof;
 import com.blockauth.auth.StepUpService;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.ErrorCode;
+import com.blockauth.common.JobLock;
 import com.blockauth.common.PageResponse;
 import com.blockauth.common.Specs;
 import com.blockauth.common.WalletAddresses;
@@ -70,10 +71,12 @@ public class AdminActionService {
 	private final AuditService audit;
 	private final SecuritySettings settings;
 	private final Clock clock;
+	private final JobLock jobs;
 
 	public AdminActionService(AdminActionRepository actions, AdminWalletService wallets, SecondStepService secondStep,
 			EmergencyStopService stop, UserRepository users, StepUpService stepUp, AuditService audit,
-			SecuritySettings settings, Clock clock) {
+			SecuritySettings settings, Clock clock, JobLock jobs) {
+		this.jobs = jobs;
 		this.actions = actions;
 		this.wallets = wallets;
 		this.secondStep = secondStep;
@@ -164,6 +167,10 @@ public class AdminActionService {
 	 * integration tests switch the schedule off ("-") and call this themselves.
 	 */
 	@Scheduled(cron = "${blockauth.admin-actions.schedule:*/15 * * * * *}")
+	public void scheduledRun() {
+		jobs.runExclusive("admin-actions", Duration.ofMinutes(5), this::runDue);
+	}
+
 	public void runDue() {
 		for (AdminAction action : actions.findDue(clock.instant())) {
 			try {

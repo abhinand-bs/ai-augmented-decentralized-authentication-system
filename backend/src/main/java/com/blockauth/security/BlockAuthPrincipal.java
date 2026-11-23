@@ -16,6 +16,9 @@ import com.blockauth.user.User;
  */
 public record BlockAuthPrincipal(UUID userId, String walletAddress, UUID sessionId) implements Serializable {
 
+	// Stored in the session (in Redis when sessions are shared). Records serialize by their components.
+	private static final long serialVersionUID = 1L;
+
 	/** The authentication for a user as the database describes them right now. There are no credentials. */
 	public static Authentication authentication(User user, UUID sessionId) {
 		return UsernamePasswordAuthenticationToken.authenticated(

@@ -32,11 +32,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
 	private static final Set<String> VERIFY_PATHS = Set.of("/api/auth/register", "/api/auth/verify",
 			"/api/auth/second-step");
 
-	private final InMemoryRateLimiter limiter;
+	private final RateLimiter limiter;
 	private final AuditService audit;
 	private final ApiErrorWriter errors;
 
-	public RateLimitFilter(InMemoryRateLimiter limiter, AuditService audit, ApiErrorWriter errors) {
+	public RateLimitFilter(RateLimiter limiter, AuditService audit, ApiErrorWriter errors) {
 		this.limiter = limiter;
 		this.audit = audit;
 		this.errors = errors;
@@ -64,7 +64,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 			}
 		}
 
-		InMemoryRateLimiter.Decision decision = !authEndpoint
+		RateLimiter.Decision decision = !authEndpoint
 				? limiter.acquire("api-ip", client.ip(), API_REQUESTS_PER_WINDOW, WINDOW)
 				: limiter.acquire(challenge ? "challenge-ip" : "verify-ip", client.ip(), AUTH_REQUESTS_PER_WINDOW,
 						WINDOW);

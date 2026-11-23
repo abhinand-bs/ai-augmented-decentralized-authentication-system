@@ -7,16 +7,16 @@ import com.blockauth.audit.AuthEventType;
 import com.blockauth.audit.ClientInfo;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.ErrorCode;
-import com.blockauth.security.InMemoryRateLimiter;
+import com.blockauth.security.RateLimiter;
 
 /** Audits a failed registration or login and counts it toward the per-IP temporary block. */
 @Component
 class AuthFailureRecorder {
 
 	private final AuditService audit;
-	private final InMemoryRateLimiter limiter;
+	private final RateLimiter limiter;
 
-	AuthFailureRecorder(AuditService audit, InMemoryRateLimiter limiter) {
+	AuthFailureRecorder(AuditService audit, RateLimiter limiter) {
 		this.audit = audit;
 		this.limiter = limiter;
 	}

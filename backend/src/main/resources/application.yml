@@ -1,6 +1,18 @@
 spring:
   config:
     import: "optional:file:../.env.local[.properties],optional:file:.env.local[.properties]"
+  # Redis is optional (the "redis" profile, application-redis.yml). Without it these stay off, so sessions live
+  # in this process and nothing tries to reach Redis.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.session.data.redis.autoconfigure.SessionDataRedisAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisReactiveAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisRepositoriesAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.health.DataRedisHealthContributorAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.health.DataRedisReactiveHealthContributorAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.observation.LettuceObservationAutoConfiguration
+      - org.springframework.boot.session.autoconfigure.SessionsEndpointAutoConfiguration
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -60,6 +72,13 @@ management:
     web:
       exposure:
         include: health
+  # The health endpoint stays a plain "is this process up": it does not turn DOWN because Redis or the mail
+  # server is unreachable (those failures are handled where they happen: 503, or a logged, skipped alert).
+  health:
+    redis:
+      enabled: false
+    mail:
+      enabled: false
   endpoint:
     health:
       show-details: never

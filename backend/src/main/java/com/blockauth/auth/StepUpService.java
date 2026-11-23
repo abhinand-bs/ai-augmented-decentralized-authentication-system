@@ -8,7 +8,7 @@ import com.blockauth.audit.ClientInfo;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.ErrorCode;
 import com.blockauth.security.BlockAuthPrincipal;
-import com.blockauth.security.InMemoryRateLimiter;
+import com.blockauth.security.RateLimiter;
 
 /**
  * Fresh signatures for dangerous actions. The session alone is not enough: the wallet that owns the
@@ -21,10 +21,10 @@ public class StepUpService {
 	private final ChallengeService challenges;
 	private final SignatureVerifier signatures;
 	private final AuditService audit;
-	private final InMemoryRateLimiter limiter;
+	private final RateLimiter limiter;
 
 	public StepUpService(ChallengeService challenges, SignatureVerifier signatures, AuditService audit,
-			InMemoryRateLimiter limiter) {
+			RateLimiter limiter) {
 		this.challenges = challenges;
 		this.signatures = signatures;
 		this.audit = audit;
