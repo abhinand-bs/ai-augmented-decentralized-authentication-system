@@ -151,12 +151,19 @@ class AlertEmailIT extends IntegrationTest {
 		reset(mail);
 		rateLimiter.clear();
 		assertThat(setAddress(laptop, "second@example.com").status()).isEqualTo(200);
-		List<SimpleMailMessage> messages = sent(2);
-		assertThat(messages).anySatisfy(m -> {
-			assertThat(m.getTo()).containsExactly("first@example.com");
-			assertThat(m.getSubject()).isEqualTo(AlertMailer.CHANGED_SUBJECT);
+		// Alerts for the sign-ins above may still arrive after the reset: wait for the two expected messages.
+		ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+			verify(mail, atLeastOnce()).send(captor.capture());
+			assertThat(captor.getAllValues()).anySatisfy(m -> {
+				assertThat(m.getTo()).containsExactly("first@example.com");
+				assertThat(m.getSubject()).isEqualTo(AlertMailer.CHANGED_SUBJECT);
+			});
+			assertThat(captor.getAllValues()).anySatisfy(m -> {
+				assertThat(m.getTo()).containsExactly("second@example.com");
+				assertThat(m.getSubject()).isEqualTo(AlertMailer.VERIFY_SUBJECT);
+			});
 		});
-		assertThat(messages).anySatisfy(m -> assertThat(m.getTo()).containsExactly("second@example.com"));
 	}
 
 	@Test

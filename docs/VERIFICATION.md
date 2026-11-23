@@ -17,7 +17,7 @@ Every row was run on this machine (Windows 11, Java 21.0.11, Node 24.16, Docker 
 | Contracts | deploy rehearsal on a Hardhat node with chain ID 11155111 (`--network sepolia` → local node, throwaway keys) | pass | 5/5 guard cases; `check-deployment.js` 6/6 OK, keyless | — |
 | Backend | `.\mvnw.cmd verify -Pblockchain-it` (local PostgreSQL, Hardhat 8545, Redis 6380) | pass | **214 unit, 219 integration**, 0 failures (includes chain, Redis and load tests) | 2 min 50 s |
 | Backend | `.\mvnw.cmd verify` (local PostgreSQL; default tags) | pass | 212 unit, 192 integration | 2 min 20 s |
-| Backend | `.\mvnw.cmd verify` on **Neon test** (final code; applies V4 and V5 there) | NEON_RESULT | NEON_COUNTS | NEON_TIME |
+| Backend | `.\mvnw.cmd verify` on **Neon test** (final code; applies V4 and V5 there) | pass after one test fix | 214 unit; 198 integration with 1 failure: a timing flaw in `AlertEmailIT` (late alert mails from earlier sign-ins satisfied "at least two messages"). Test fixed to wait for the specific messages; `AlertEmailIT` then 6/6 on Neon and 2×6/6 locally. V1-V5 now on the Neon `test` branch (main branch untouched) | 19 min 38 s |
 | Backend | `WalletRegistryClientIT` against chain 31337 and against a node with chain ID 11155111 | pass | 12/12 and 12/12; all backend transactions type 2 (EIP-1559) | 8 s each |
 | Backend | `Eip1559TransactionTest` vs. ethers v6 | pass | signed bytes and hash identical | — |
 | Backend | `LoadSmokeIT` (50 concurrent logins from 50 proxied addresses, local PostgreSQL) | pass | all 200; total 654 ms; p50 151 ms, p95 259 ms, max 268 ms; pool 5 fully used, up to 9 threads waiting; 269 → 286 threads | 24 s |
@@ -25,7 +25,7 @@ Every row was run on this machine (Windows 11, Java 21.0.11, Node 24.16, Docker 
 | Backend | anomaly model: scoring budget (`AnomalyModelTest`) | pass | p95 0.085 ms, max 0.704 ms per sign-in incl. explanation (target < 20 ms) | — |
 | Backend | anomaly model: synthetic evaluation (`AnomalyEvaluationTest`) | pass | FPR 2.85 %; detection 100 / 23.5 / 13.25 / 100 %; AUC 1.000 / 0.936 / 0.908 / 0.995 (**synthetic data only**, see `RISK_MODEL.md`) | — |
 | Frontend | `npm run lint` | pass | 0 problems | — |
-| Frontend | `npm run test:coverage` | pass | 83 tests; coverage floor 35/32/28/35 met | 3 s |
+| Frontend | `npm run test:coverage` | pass | 88 tests; 40.4 / 38.3 / 33.0 / 40.0 % (floor 39/37/32/39) | 4 s |
 | Frontend | `npm run build`; `npm run check:bundle` | pass | JS ≈ 331 kB; no web3 library in `dist/` (a planted marker fails the check) | 1 s |
 | Frontend | `npm run test:e2e` (Playwright, mocked API) | pass | 19 passed; every page at 360, 768, 1280, 1920 px without horizontal overflow; no console errors | 18 s |
 | Frontend | full-stack smoke (`E2E_FULLSTACK=1`, backend jar on 18080, Hardhat 8545) | pass | register, login, dashboard, history, logout; admin revokes; user refused | 9 s |
@@ -37,8 +37,8 @@ Every row was run on this machine (Windows 11, Java 21.0.11, Node 24.16, Docker 
 | Docker | `docker compose build` | pass after fix | first attempt failed (`npm ci` under npm 10 rejected the frontend lock); lock regenerated; all three images build | 2 min |
 | Docker | default stack up (override: local database instead of Neon, ports 13000/18545), deploy, sign-ins through nginx | pass | backend healthy; SPA and deep links 200; headers present; 3 registrations and logins; every client recorded as `172.29.53.1` (Docker Desktop gateway) | — |
 | CI | `actionlint` (Docker image) on `.github/workflows/*.yml` | pass | 0 findings; every action pinned to a commit SHA | — |
-| Clean clone | fresh clone of the branch, no `.env.local`: contracts `npm ci` + tests, frontend `npm ci` + lint + tests + build + bundle check, backend `mvnw verify` (local PostgreSQL) | CLONE_RESULT | CLONE_COUNTS | — |
-| ZAP | baseline scan of the Docker stack | ZAP_RESULT | ZAP_COUNTS | — |
+| Clean clone | fresh clone of the branch, no `.env.local`: contracts `npm ci` + tests, frontend `npm ci` + lint + tests + build + bundle check, backend `mvnw verify` (local PostgreSQL) | pass after one fix | at `3ef7808`: contracts 32 passing; backend 214 unit + 198 IT, 0 failures, 1 skipped (the developer-config test, by design); frontend lint, build and bundle check OK but **coverage below the floor** (A-31). After adding tests, a second fresh clone at `3aa9cbd`: lint OK, 88 tests, floor met, build and bundle check OK | ~6 min |
+| ZAP | baseline scan of the Docker stack | pass | `zap-baseline.py` (zap-stable, `--memory 4g`) on the Docker stack: 0 FAIL, 63 PASS, 5 WARN; after adding `Permissions-Policy`: 0 FAIL, 64 PASS, 4 WARN (see `security-tests/zap/README.md`). Active scan not run this time | ~2 min |
 
 ## Screenshots
 
