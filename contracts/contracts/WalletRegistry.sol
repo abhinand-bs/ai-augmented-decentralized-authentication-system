@@ -129,6 +129,8 @@ contract WalletRegistry {
     function executeActivation(address wallet) external onlyOperator whenNotPaused nonZero(wallet) {
         Request memory request = activationRequests[wallet];
         if (!_live(request)) revert NotRequested();
+        // The delay is minutes to days; the few seconds a block producer can shift the timestamp do not matter.
+        // slither-disable-next-line timestamp
         if (block.timestamp < request.executeAfter) revert TooEarly();
         // A live request exists only for a revoked wallet: revoking deletes it, and it is made only then.
         records[wallet].status = Status.Active;
@@ -162,6 +164,8 @@ contract WalletRegistry {
     function executeUnpause() external onlyOperator {
         if (!paused) revert NotPaused();
         if (!_live(unpauseRequest)) revert NotRequested();
+        // Same as executeActivation: the delay dwarfs any timestamp drift.
+        // slither-disable-next-line timestamp
         if (block.timestamp < unpauseRequest.executeAfter) revert TooEarly();
         paused = false;
         delete unpauseRequest;
@@ -192,11 +196,15 @@ contract WalletRegistry {
 
     // ---------------------------------------------------------------- views
 
+    // Slither flags the enum comparisons below because the record also holds a timestamp; nothing here
+    // compares a time or a balance.
     function isRegistered(address wallet) external view returns (bool) {
+        // slither-disable-next-line timestamp
         return records[wallet].status != Status.None;
     }
 
     function isActive(address wallet) external view returns (bool) {
+        // slither-disable-next-line incorrect-equality,timestamp
         return records[wallet].status == Status.Active;
     }
 
@@ -206,6 +214,7 @@ contract WalletRegistry {
         returns (bool registered, bool active, uint64 registeredAt)
     {
         WalletRecord memory r = records[wallet];
+        // slither-disable-next-line incorrect-equality,timestamp
         return (r.status != Status.None, r.status == Status.Active, r.registeredAt);
     }
 
@@ -220,7 +229,9 @@ contract WalletRegistry {
         return _live(unpauseRequest) ? unpauseRequest.executeAfter : 0;
     }
 
+    // An epoch counter and a "not set" check, not a time comparison.
     function _live(Request memory request) private view returns (bool) {
+        // slither-disable-next-line incorrect-equality,timestamp
         return request.executeAfter != 0 && request.epoch == operatorEpoch;
     }
 }

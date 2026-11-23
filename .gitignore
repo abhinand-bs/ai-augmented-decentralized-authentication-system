@@ -47,3 +47,6 @@ newman/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Contract coverage output
+contracts/coverage.json

@@ -1,0 +1,4 @@
+{
+  "filter_paths": "node_modules|contracts/mocks",
+  "fail_on": "medium"
+}
