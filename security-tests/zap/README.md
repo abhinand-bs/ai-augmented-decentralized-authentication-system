@@ -2,7 +2,7 @@
 
 Scan only your own local stack. Reports go in `security-tests/zap/reports/` (git-ignored).
 
-Start the Docker stack first, as described in the "Docker" section of the main README, so that the nginx
+Start the Docker stack first, as described in the "Running with Docker" section of the main README, so that the nginx
 security headers and Content-Security-Policy are present. The commands below assume the frontend on
 port 3000.
 
@@ -64,8 +64,8 @@ every paged endpoint answer 500 instead of 400. Fixed the same day (the error ha
 logged no other internal error.
 
 The session scan reached the profile, history, wallet-status and logout endpoints. The backend answered
-with validation, authorization and rate-limit errors only; it logged no internal error. An ADMIN session
-has not been scanned.
+with validation, authorization and rate-limit errors only; it logged no internal error. An API scan with an
+ADMIN session followed on 2026-10-19 (see the results table).
 
 ## Accepted findings
 

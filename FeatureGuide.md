@@ -8,7 +8,9 @@ features were **added** beyond the original plan. It was written from the actual
 - **How to demonstrate it:** what to click.
 - **What we should say to Mam:** one or two sentences to speak.
 
-> **Important:** the project has **no AI features**. The "trust score" is a set of fixed rules we wrote.
+> **Important:** the trust score is a set of fixed rules we wrote **plus** a small unsupervised anomaly model
+> (machine learning, an Isolation Forest). The model runs in "shadow" mode by default: it is shown to the
+> admin but changes no decision. It is a risk indicator, never proof of identity.
 
 ---
 
@@ -118,7 +120,10 @@ A normal user is anyone whose wallet is registered and who is **not** in the adm
   3. Open **Account security** and click **This was not me**.
 - **What we should say to Mam:** "If the wallet signs in somewhere new, the user is warned and can sign that
   device out with one click."
-- **Note:** The alerts appear inside the app only. There are no e-mail or phone notifications.
+- **E-mail (optional):** on Account security the user can add an alert e-mail address. Setting it needs a
+  wallet signature and a 6-digit code sent to the address. The server then also e-mails new-device sign-ins
+  (plain text, no links). It is off unless the server has a mail server configured; there are no SMS or phone
+  notifications.
 
 ### 1.11 Second Step (Authenticator App and Backup Codes) *(added feature)*
 
@@ -151,8 +156,12 @@ A normal user is anyone whose wallet is registered and who is **not** in the adm
 - **Purpose:** It catches logins that don't look normal.
 - **How to demonstrate it:** The user cannot see it. Show it later as admin under **Security → Sign-in
   risk**.
-- **What we should say to Mam:** "Each login is scored with simple fixed rules. A risky login needs the second
-  step. This is not AI; every decision can be explained."
+- **Between 50 and 89 without a second step:** the signature alone is enough (the login is allowed).
+- **Anomaly model:** beside the rules, an unsupervised model scores how unusual the login is and names the two
+  things that made it unusual (for example "new device, hour"). By default it is only shown to the admin.
+- **What we should say to Mam:** "Each login is scored with simple fixed rules, and a small anomaly model also
+  says how unusual it looks. A risky login needs the second step. Every rule decision can be explained, and the
+  model is only a risk indicator."
 
 ### 1.13 Logout and Automatic Sign-out
 
@@ -245,7 +254,9 @@ Wallets, Security and Controls**.
   - **Security events:** attacks the system detected and blocked, for example a replayed message, a wrong
     signature, an unknown or revoked wallet, too many requests, a failed confirmation signature.
   - **Authentication events:** every registration, login, logout and admin action.
-  - **Sign-in risk** *(added)*: the trust score of every login, why points were taken off, and the decision.
+  - **Sign-in risk** *(added)*: the trust score of every login, why points were taken off, the decision, the
+    anomaly score with the two features that made the login unusual, a filter for a minimum anomaly score, and a
+    card showing the model's mode, version and training data.
 - **Purpose:** The admin can see attacks and investigate what happened.
 - **How to demonstrate it:** Click **Security** and switch between the three tabs.
 - **What we should say to Mam:** "Every attack the server stops is recorded here, with the time, wallet and
@@ -359,7 +370,7 @@ them from GitHub.
 | **Emergency stop pauses the contract too** | Registrations and reactivations are refused on the blockchain as well | Before, the stop only worked inside our server | The stop also binds the blockchain |
 | **Automatic blockchain check every 15 seconds** | Signs out wallets that were revoked outside the app, and cancels blockchain requests our server did not make | Before, such changes were noticed late | Faster and safer reaction |
 | **Fresh signature to cancel a waiting action or revoke an API key** | These two admin actions now need the wallet too | A stolen admin session could still do them | Every admin change needs the wallet |
-| **Fair rate limits in Docker** | Each user behind the Docker web server gets their own limit | Before, one user's failed logins could block everyone | No accidental lock-out of all users |
+| **Rate limits behind the Docker web server** | The backend now takes each user's address from nginx (and trusts only nginx) | Before, it always saw nginx's address | Each user gets their own limit where Docker keeps client addresses (Linux). On Docker Desktop (Windows, macOS) all clients still arrive from one gateway address and share one limit |
 | **Security test report** | `AttackCheck.md` lists 30 attacks with results | To prove the protections work | Evidence for the demo |
 
 ---
@@ -462,7 +473,11 @@ Read this in order. The bracketed text tells you what to click.
 >
 > Most recently, we redesigned the smart contract with two keys and a waiting time on the blockchain, so one
 > stolen server key cannot give access back instantly. The server also checks the blockchain every 15
-> seconds. We tested 30 attacks and wrote the results in our security report."
+> seconds. We tested 30 attacks and wrote the results in our security report.
+>
+> In the latest round we added an anomaly model to the trust score, optional e-mail alerts, optional Redis so
+> several servers can share sessions, automated tests for the website and fuzz tests for the contract, and a
+> CI pipeline."
 
 ### Part 5 — Closing
 
@@ -476,14 +491,13 @@ Read this in order. The bracketed text tells you what to click.
 
 | Not available | Simple answer |
 |---|---|
-| AI or machine learning | "There is no AI. The trust score uses fixed rules." |
-| E-mail or SMS alerts | "Alerts are shown inside the app only." |
+| SMS or push alerts | "Alerts are shown in the app and, if the user adds an address, by e-mail." |
 | Recovery of a lost wallet key | "There is no recovery. Only the owner has the key." |
 | Making a user an admin from the website | "Admins come from the server's settings when they register." |
 | Downloadable reports (PDF or Excel) | "Admins see the data on the pages; scripts can read it with API keys." |
 | A QR code for the authenticator | "The key is typed into the app by hand." |
 | Mobile phones | "It needs the MetaMask extension in a desktop browser." |
-| A public blockchain | "It runs on a local Hardhat blockchain for this project." |
+| A public blockchain | "It runs on a local Hardhat blockchain. It is prepared for the Sepolia test network, but not deployed there yet." |
 | Guardian buttons on the website | "The guardian key is kept offline; its actions run from a script." |
 | Date filters on the event pages | "The server supports them, but the page does not show them yet." |
 
@@ -500,3 +514,21 @@ Read this in order. The bracketed text tells you what to click.
 | Why must reactivation wait? | "Giving access back is risky, so other admins get time to cancel it." |
 | Why two keys in the contract? | "So one stolen key cannot control everything." |
 | Why can a normal user not see the admin pages? | "The server checks the role on every request, not just the menu." |
+
+---
+
+## 8. How to Explain the Risk Model (ready to speak)
+
+- **What it is:** fixed rules (new device, new network, flags, failures, shared devices) give the trust score;
+  next to them an unsupervised anomaly model, an Isolation Forest, learns what ordinary logins look like and
+  rates how unusual a new one is, from 0.5 (ordinary) to 1 (very unusual).
+- **How to demonstrate it:** as admin, open **Security → Sign-in risk**. Show the rule score, the anomaly score,
+  the final score, the two features listed under "Unusual in", and the model card (mode "Shadow").
+- **What we should say to Mam:** "The wallet signature is still the only proof of identity. After it, fixed rules
+  give a trust score, and a small machine-learning model says how unusual the login looks and why. By default the
+  model only advises: the admin sees its score, but it changes nothing. If we switch it on, it can only lower the
+  score, by at most 30 points, never raise it, and if it fails the rules decide alone. We tested it on made-up
+  data only, so we do not claim real-world accuracy."
+- **If asked "is this AI?":** "Yes, a small unsupervised model, written in plain Java and trained on our own login
+  records (or on made-up ordinary logins until we have 200 real ones). It is a risk indicator, never proof of
+  identity." Details: `docs/RISK_MODEL.md`.

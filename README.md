@@ -1,5 +1,7 @@
 # BlockAuth
 
+[![CI](https://github.com/abhinandbs12/ai-augmented-decentralized-authentication-system/actions/workflows/ci.yml/badge.svg)](https://github.com/abhinandbs12/ai-augmented-decentralized-authentication-system/actions/workflows/ci.yml)
+
 **Blockchain-based wallet authentication and identity verification.**
 
 BlockAuth replaces passwords with proof of wallet ownership. A user signs a one-time message in
@@ -134,7 +136,7 @@ not create a session: the user logs in afterwards.
 | Smart contract | Solidity 0.8.24, Hardhat 2 with `@nomicfoundation/hardhat-toolbox` |
 | Database | Neon PostgreSQL, Flyway migrations |
 | Build | Maven (wrapper included), npm |
-| Testing | JUnit 5, Spring Boot Test, Mockito, Hardhat tests (Mocha/Chai), Postman collection, OWASP ZAP |
+| Testing | JUnit 5, Spring Boot Test, Mockito; Hardhat tests (Mocha/Chai), fast-check, solidity-coverage, Slither; Vitest, Testing Library, Playwright, ESLint; Postman/newman; OWASP ZAP; GitHub Actions |
 | Containers (optional) | Docker Compose: Hardhat node, backend (Eclipse Temurin 21), frontend (nginx) |
 
 ## Project structure
@@ -296,9 +298,16 @@ frontend and the contracts project need none.
 | `SECOND_STEP_ENCRYPTION_KEY` | 32 random bytes, Base64; encrypts authenticator secrets and keys the backup-code hashes | Yes |
 | `TRUSTED_DEVICE_DAYS` | Days a device stays trusted after passing the second step, default `30` | No |
 | `ADMIN_ACTION_DELAY` | Waiting period for delayed admin actions, default `10m` (between `1s` and `7d`) | No |
+| `TRUST_*`, `ANOMALY_*` | Trust-score rules and the anomaly model (mode `shadow` by default); see `.env.example` and `docs/RISK_MODEL.md` | No |
+| `BLOCKCHAIN_RECEIPT_TIMEOUT`, `BLOCKCHAIN_CONFIRMATIONS`, `BLOCKCHAIN_MAX_FEE_GWEI`, ... | How registry transactions are sent; local defaults, Sepolia values in `docs/SEPOLIA.md` | No |
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_SSL` | Shared state for several instances, with `SPRING_PROFILES_ACTIVE=...,redis` | No |
+| `MAIL_ENABLED`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | Optional e-mail alerts; STARTTLS required | No |
+| `RETENTION_DAYS`, `DB_POOL_SIZE`, `SCHEDULER_POOL_SIZE`, `API_KEY_MAX_DAYS` | Retention (0 = keep everything), pools, API-key lifetime limit | No |
 
-`DB_PASSWORD`, `TEST_DB_PASSWORD`, `BLOCKCHAIN_OPERATOR_PRIVATE_KEY` and `SECOND_STEP_ENCRYPTION_KEY` are
-secrets: never commit them. Changing `SECOND_STEP_ENCRYPTION_KEY` makes every enrolled second step and
+Every setting, with its default and meaning, is listed in `.env.example`.
+
+`DB_PASSWORD`, `TEST_DB_PASSWORD`, `BLOCKCHAIN_OPERATOR_PRIVATE_KEY`, `SECOND_STEP_ENCRYPTION_KEY`,
+`REDIS_PASSWORD` and `MAIL_PASSWORD` are secrets: never commit them. Changing `SECOND_STEP_ENCRYPTION_KEY` makes every enrolled second step and
 backup code unusable.
 
 ## Running with Docker
@@ -317,6 +326,16 @@ docker compose up -d --build backend frontend            # after setting CONTRAC
 Open `http://localhost:3000`. `docker compose down` discards the chain: deploy again and reset the
 development data (see [Troubleshooting](#troubleshooting)).
 
+Optional profiles (the default `up` above is unchanged):
+
+```powershell
+# Several backend instances sharing sessions, rate limits and locks through a password-protected Redis
+$env:REDIS_PASSWORD = '<choose one>'
+docker compose --profile redis -f docker-compose.yml -f docker-compose.redis.yml up -d --build --scale backend=2
+# A local mail catcher for the e-mail alerts (inbox on http://127.0.0.1:8025)
+docker compose --profile mail up -d mailpit
+```
+
 ## Testing
 
 | What | Needs | Command |
@@ -325,16 +344,25 @@ development data (see [Troubleshooting](#troubleshooting)).
 | Backend unit tests | nothing running | `cd backend; .\mvnw.cmd test` |
 | Backend unit and integration tests | `TEST_DB_*` in `.env.local` | `cd backend; .\mvnw.cmd verify` |
 | Same, plus tests against the real chain | `hardhat node` running with the contract deployed | `cd backend; .\mvnw.cmd verify -Pblockchain-it` |
-| Frontend production build | nothing running | `cd frontend; npm run build` |
+| Contract coverage, fuzzing, static analysis | Python for Slither (`pip install slither-analyzer`) | `cd contracts; npx hardhat coverage`; `npm run test:model`; `npm run slither` |
+| Backend load smoke test (50 logins) | `TEST_DB_*` | `cd backend; .\mvnw.cmd verify -Dit.test=LoadSmokeIT -Dit.excludedGroups=` |
+| Backend Redis tests (two instances) | a password-protected Redis, `REDIS_PASSWORD` (and `REDIS_PORT`, default 6380) | `cd backend; .\mvnw.cmd verify -Dit.test="Redis*IT" -Dit.excludedGroups=` |
+| Frontend lint, unit tests with coverage, build, bundle check | nothing running | `cd frontend; npm run lint; npm run test:coverage; npm run build; npm run check:bundle` |
+| Frontend end-to-end (Playwright) | `npx playwright install chromium` once | `cd frontend; npm run test:e2e` (full-stack smoke: `frontend/e2e/README.md`) |
 
-The integration tests run the real application over HTTP with real signatures against the Neon `test`
-branch, and empty its tables before every test: never point `TEST_DB_*` at the application's branch.
+The integration tests run the real application over HTTP with real signatures against the database in
+`TEST_DB_*` (the Neon `test` branch, or any throwaway PostgreSQL 16 such as
+`docker run -d -p 127.0.0.1:55433:5432 -e POSTGRES_PASSWORD=... postgres:16-alpine`), and empty its tables before
+every test: never point `TEST_DB_*` at the application's branch. On Linux or macOS use `./mvnw` instead of
+`.\mvnw.cmd`. CI (`.github/workflows/ci.yml`) runs all of the above on every push; `docs/VERIFICATION.md`
+records the latest local results.
 
 - **Postman:** import `postman/BlockAuth.postman_collection.json` and run it against the local stack. It
   covers unsigned authentication checks, authorization, validation and injection, CSRF, rate limiting and
   the admin endpoints. For requests marked USER or ADMIN, copy the `BLOCKAUTH_SESSION` cookie from the
   browser into the `userSession` or `adminSession` variable. Postman cannot produce wallet signatures, so
-  it checks that signed actions are refused without one.
+  it checks that signed actions are refused without one. Run it at most once a minute: it uses most of the
+  per-address request budget.
 - **OWASP ZAP:** `security-tests/zap/README.md` describes baseline, full and API scans of a local stack.
 
 ## API reference
@@ -478,15 +506,21 @@ TRUNCATE users, authentication_challenges, authentication_events, security_event
 
 ## Known limitations
 
-- Single backend instance: sessions, rate-limit counters and pending second-step attempts live in memory
-  and are lost on restart.
-- Sign-in alerts are shown in the app only; no e-mail or push notifications exist.
+- By default a single backend instance: sessions, rate-limit counters and pending second-step attempts live
+  in memory and are lost on restart. The optional `redis` profile shares them between instances (see
+  `docker-compose.redis.yml`).
+- Sign-in alerts are shown in the app and, optionally, by e-mail (`MAIL_ENABLED`, needs an SMTP server); no
+  SMS or push notifications.
 - A stolen operator key can still register wallets (while the contract is not paused) and revoke any
   wallet at once; it cannot restore access without the on-chain delay. The guardian key must be kept
   offline and separate: whoever holds both keys controls the registry.
 - A wallet revoked outside the app keeps its open sessions for up to about 15 seconds, until the next chain
   check; its new sign-ins are refused at once.
 - Trust-score thresholds and penalties, and the default `ADMIN_ACTION_DELAY`, are starting values rather
-  than tuned figures.
+  than tuned figures. The anomaly model beside the rules (`docs/RISK_MODEL.md`) was evaluated on synthetic data
+  only and runs in shadow mode by default; it is a risk indicator, not proof of identity.
 - Supported browser: desktop Chrome with the MetaMask extension. Mobile is not supported.
-- Only one local chain (Hardhat, chain ID 31337) is configured; no public network is set up.
+- The local chain (Hardhat, chain ID 31337) is the default. Sepolia is supported and rehearsed locally
+  (`docs/SEPOLIA.md`) but has not been deployed.
+- On Docker Desktop (Windows, macOS) every client reaches nginx from the Docker gateway address, so all users
+  share one set of per-address limits there; on Linux, clients keep their own addresses.

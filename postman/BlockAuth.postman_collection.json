@@ -1680,6 +1680,269 @@
             ],
             "url": "{{baseUrl}}/api/admin/login-assessments"
           }
+        },
+        {
+          "name": "Anonymous: GET /api/admin/risk-model",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error code is UNAUTHENTICATED', () => pm.expect(pm.response.json().code).to.eql('UNAUTHENTICATED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/risk-model"
+          }
+        },
+        {
+          "name": "Anonymous: GET /api/admin/api-keys/limits",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error code is UNAUTHENTICATED', () => pm.expect(pm.response.json().code).to.eql('UNAUTHENTICATED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/api-keys/limits"
+          }
+        },
+        {
+          "name": "Anonymous: GET /api/blockchain/operator",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error code is UNAUTHENTICATED', () => pm.expect(pm.response.json().code).to.eql('UNAUTHENTICATED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/blockchain/operator"
+          }
+        },
+        {
+          "name": "Anonymous: GET /api/users/alert-email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error code is UNAUTHENTICATED', () => pm.expect(pm.response.json().code).to.eql('UNAUTHENTICATED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/alert-email"
+          }
+        },
+        {
+          "name": "USER: GET /api/admin/risk-model",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('userSession')) {",
+                  "    console.log('Skipped: set the userSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error code is ACCESS_DENIED', () => pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{userSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/risk-model"
+          }
+        },
+        {
+          "name": "USER: GET /api/admin/api-keys/limits",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('userSession')) {",
+                  "    console.log('Skipped: set the userSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error code is ACCESS_DENIED', () => pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{userSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/api-keys/limits"
+          }
+        },
+        {
+          "name": "USER: GET /api/blockchain/operator",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('userSession')) {",
+                  "    console.log('Skipped: set the userSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error code is ACCESS_DENIED', () => pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{userSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/blockchain/operator"
+          }
+        },
+        {
+          "name": "USER: own alert e-mail status",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('userSession')) {",
+                  "    console.log('Skipped: set the userSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('exactly the documented fields', () => pm.expect(pm.response.json()).to.have.all.keys('available', 'address', 'verified', 'codeExpiresAt'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{userSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/alert-email"
+          }
         }
       ]
     },
@@ -2155,6 +2418,64 @@
               }
             ],
             "url": "{{baseUrl}}/api/admin/security-events?from=2026-01-02T00:00:00Z&to=2026-01-01T00:00:00Z"
+          }
+        },
+        {
+          "name": "USER: alert e-mail without a signature is refused",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('userSession')) {",
+                  "    console.log('Skipped: set the userSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(pm.response.json().code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{userSession}}; XSRF-TOKEN={{xsrf}}"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{appOrigin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"a@b.com\\r\\nBcc: x@evil.test\"}"
+            },
+            "url": "{{baseUrl}}/api/users/alert-email"
           }
         }
       ]
@@ -3276,7 +3597,7 @@
                   "pm.test('status is 200', () => pm.response.to.have.status(200));",
                   "pm.test('assessment fields', () => {",
                   "    const items = pm.response.json().items;",
-                  "    if (items.length) pm.expect(items[0]).to.have.all.keys('id', 'walletAddress', 'ipAddress', 'score', 'rules', 'decision', 'assessedAt');",
+                  "    if (items.length) pm.expect(items[0]).to.have.all.keys('id', 'walletAddress', 'ipAddress', 'score', 'rules', 'decision', 'assessedAt', 'ruleScore', 'anomalyScore', 'finalScore', 'modelVersion', 'mode', 'topFeatures');",
                   "});"
                 ]
               }
@@ -3387,6 +3708,249 @@
               "raw": "{\n  \"proof\": {\n    \"challenge\": \"not a challenge this server issued\",\n    \"signature\": \"0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"\n  },\n  \"name\": \"Report\",\n  \"scopes\": [\n    \"users:write\"\n  ],\n  \"days\": 30\n}"
             },
             "description": "Keys are read-only: only users:read, audit:read and wallet-status:read exist."
+          }
+        },
+        {
+          "name": "ADMIN: risk model status (read-only)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('adminSession')) {",
+                  "    console.log('Skipped: set the adminSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('exactly the documented fields', () => pm.expect(pm.response.json()).to.have.all.keys('version', 'trainedAt', 'sampleCount', 'source', 'mode'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{adminSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/risk-model"
+          }
+        },
+        {
+          "name": "ADMIN: API key limits",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('adminSession')) {",
+                  "    console.log('Skipped: set the adminSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('exactly the documented fields', () => pm.expect(pm.response.json()).to.have.all.keys('maxDays'));",
+                  "pm.test('maxDays is a positive number', () => pm.expect(pm.response.json().maxDays).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{adminSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/api-keys/limits"
+          }
+        },
+        {
+          "name": "ADMIN: operator account balance",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('adminSession')) {",
+                  "    console.log('Skipped: set the adminSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('exactly the documented fields', () => pm.expect(pm.response.json()).to.have.all.keys('operatorAddress', 'balanceEth', 'balanceLow'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{adminSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/blockchain/operator"
+          }
+        },
+        {
+          "name": "ADMIN: assessments with the model fields",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('adminSession')) {",
+                  "    console.log('Skipped: set the adminSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('paged', () => pm.expect(pm.response.json()).to.have.all.keys('items', 'page', 'size', 'totalElements', 'totalPages'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{adminSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/login-assessments?minAnomaly=0"
+          }
+        },
+        {
+          "name": "ADMIN: minAnomaly out of range",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('adminSession')) {",
+                  "    console.log('Skipped: set the adminSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(pm.response.json().code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('standard error body with nothing internal in it', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.all.keys('status', 'code', 'message', 'timestamp', 'path', 'errorId', 'fieldErrors');",
+                  "    pm.expect(pm.response.text()).to.not.match(/Exception|jdbc:|select |insert |at com\\./i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{adminSession}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/login-assessments?minAnomaly=2"
+          }
+        },
+        {
+          "name": "ADMIN: the model cannot be changed through the API",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('adminSession')) {",
+                  "    console.log('Skipped: set the adminSession variable first.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('refused', () => pm.expect(pm.response.code).to.be.oneOf([403, 405]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "BLOCKAUTH_SESSION={{adminSession}}; XSRF-TOKEN={{xsrf}}"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{appOrigin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/admin/risk-model"
           }
         }
       ]

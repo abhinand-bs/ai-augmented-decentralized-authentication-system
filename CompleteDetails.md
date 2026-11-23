@@ -42,9 +42,10 @@ contract project `blockauth-contracts` and the page titles in the browser. The d
 longer form of that name.
 
 **Repository name:** The GitHub repository is called `ai-augmented-decentralized-authentication-system`.
-That name is older than the current code. The current code contains no artificial-intelligence or
-machine-learning component (the "trust score" in section 6 is a fixed set of rules), and it is only
-partly decentralized (see section 3.6). The repository name should not be read as a description of what
+That name is older than the current code. Since November 2026 the trust score (section 6.14) combines
+fixed rules with a small unsupervised anomaly model (an Isolation Forest, in shadow mode by default); that is
+the only machine-learning part, and it is a risk indicator, not proof of identity. The system is only partly
+decentralized (see section 3.6). The repository name should not be read as a description of what
 the code does.
 
 **Project creators:**
@@ -239,7 +240,7 @@ Dockerfiles. "Locked" means the exact version installed by the lock file.
 | Smart contract framework | Hardhat, `@nomicfoundation/hardhat-toolbox` | 2.29.1 / 6.1.2 (locked) |
 | Contract test libraries (via toolbox) | Mocha, Chai, ethers.js | 11.8.0 / 4.5.0 / 6.17.0 (locked) |
 | Backend tests | JUnit 5, Spring Boot Test, Spring Security Test, Mockito (`@MockitoBean`) | managed by Spring Boot |
-| API tests | Postman collection | `postman/BlockAuth.postman_collection.json` (84 requests) |
+| API tests | Postman collection | `postman/BlockAuth.postman_collection.json` (99 requests) |
 | Security scanning | OWASP ZAP (run in Docker) | `ghcr.io/zaproxy/zaproxy:stable` per `security-tests/zap/README.md` |
 | Builds | Maven Wrapper (`backend/mvnw`, `mvnw.cmd`), npm | — |
 | Containers (optional) | Docker Compose, `eclipse-temurin:21` images, `node:22-alpine`, `nginx:alpine` | Dockerfiles |
@@ -319,10 +320,15 @@ README example) between the backend and PostgreSQL; EIP-1193 between the page an
 
 **Deployment infrastructure:** `docker-compose.yml` defines three services (Hardhat node, backend,
 frontend served by nginx). `frontend/nginx.conf` serves the built SPA, forwards `/api/` to the backend and
-adds security headers. No cloud deployment, CI pipeline or infrastructure-as-code exists in the repository.
+adds security headers. Optional Compose profiles add a password-protected Redis (`redis`, with
+`docker-compose.redis.yml` for several backend instances) and a Mailpit mail catcher (`mail`). GitHub Actions
+(`.github/workflows/ci.yml`) build and test every part on each push; `release.yml` pushes images to GHCR on a
+version tag. There is no cloud deployment or infrastructure-as-code.
 
 **Not used (checked):** no TypeScript, no Tailwind or UI component library, no ethers.js or web3.js in the
-frontend, no JWT, no Redis, no CORS configuration, no e-mail service, no AI or machine-learning library.
+production frontend (ethers is a test-only dev dependency; CI checks the bundle), no JWT, no CORS
+configuration, no machine-learning library (the anomaly model is about 200 lines of plain Java). Redis and
+e-mail are optional and off by default.
 
 ---
 
@@ -670,8 +676,13 @@ section 7; their entries here point there to avoid repeating the same steps.
   - **This was me** → `POST /api/users/alerts/{id}/confirm` (resolution `CONFIRMED`).
   - **This was not me** → `POST /api/users/alerts/{id}/sign-out`: ends that session, forgets its device
     and records `REMOTE_LOGOUT` (resolution `SIGNED_OUT`).
-- **Limitation:** alerts appear inside the app only. No e-mail, SMS or push notification exists.
-- **Status:** Fully implemented (in-app only). Evidence: `SignInAlertIT`.
+- **E-mail (optional, `MAIL_ENABLED`):** a user can add an alert address on Account security (a fresh wallet
+  signature is needed to set or remove it; the address must be confirmed with a mailed 6-digit code). Alerts are
+  sent after the sign-in has committed, in the background, at most 3 per hour, as plain text with a coarse IP,
+  UTC time and no links. See `alert/AlertEmailService.java`, migration V5.
+- **Limitation:** no SMS or push notifications. E-mail is off unless an SMTP server is configured.
+- **Status:** Fully implemented. Evidence: `SignInAlertIT`, `AlertEmailIT` (mail server mocked; a live SMTP
+  server was not tested).
 
 ### 6.13 Managing the second step (authenticator app and backup codes)
 
@@ -721,21 +732,28 @@ section 7; their entries here point there to avoid repeating the same steps.
   RISK_CHECK_UNAVAILABLE`) for the others. A sign-in is never let through because the check failed.
 - **Database:** every result is stored in `login_assessments` (score, rules, decision).
 - **Frontend:** results are listed under Admin → Security → **Sign-in risk**.
-- **Settings:** all thresholds and penalties are under `blockauth.security.trust.*` in `SecuritySettings`
-  (startup fails if `second-step-at` is not below `allow-at`). They are not listed in `.env.example`.
-- **Important:** the score is a fixed rule set. It is not machine learning. The code calls it "a risk
-  indicator, never proof of identity". The default numbers are starting values, not tuned figures
-  (README, Known limitations).
-- **Status:** Fully implemented. Evidence: `TrustPolicyTest`, `TrustServiceTest`, `TrustScoreIT`.
+- **Settings:** all thresholds and penalties are `TRUST_*` settings (listed in `.env.example`; startup fails
+  if `second-step-at` is not below `allow-at`). `TRUST_NETWORK_PREFIX_MATCH=true` makes "new network" compare
+  IPv4 /24 and IPv6 /48 networks instead of exact addresses.
+- **Anomaly model:** beside the rules, an unsupervised Isolation Forest (machine learning, pure Java) rates how
+  unusual the sign-in is from 15 numeric features of the same query. Shadow mode by default: stored and shown,
+  never deciding. In enforce mode it can lower the score by at most 30 points, never raise it, and adds
+  `ANOMALY_DETECTED`; if it fails, the rules decide alone. Details, evaluation (synthetic data only) and how to
+  explain it: `docs/RISK_MODEL.md`.
+- **Important:** rules plus an unsupervised anomaly model. The score is a risk indicator, never proof of
+  identity. The default numbers are starting values, not tuned figures.
+- **Status:** Fully implemented. Evidence: `TrustPolicyTest`, `TrustServiceTest`, `TrustScoreIT`,
+  `IsolationForestTest`, `AnomalyModelTest`, `AnomalyEvaluationTest`, `AnomalyShadowIT`, `AnomalyEnforceIT`,
+  `AnomalyOffIT`.
 
 ### 6.15 Fresh signature for dangerous actions ("step-up")
 
 - **Purpose / problem:** A stolen session cookie should not be enough to do something dangerous. The wallet
   must sign again for each such action.
-- **Trigger:** Any of 11 actions in `auth/StepUpAction.java`: `REVOKE_WALLET`, `ACTIVATE_WALLET`,
+- **Trigger:** Any of 15 actions in `auth/StepUpAction.java`: `REVOKE_WALLET`, `ACTIVATE_WALLET`,
   `RESET_SECOND_STEP`, `FLAG_WALLET`, `UNFLAG_WALLET`, `START_EMERGENCY_STOP`, `LIFT_EMERGENCY_STOP`,
-  `CREATE_API_KEY` (administrator only), and `ENABLE_SECOND_STEP`, `DISABLE_SECOND_STEP`,
-  `RENEW_BACKUP_CODES` (any signed-in user).
+  `CREATE_API_KEY`, `REVOKE_API_KEY`, `CANCEL_ADMIN_ACTION` (administrator only), and `ENABLE_SECOND_STEP`,
+  `DISABLE_SECOND_STEP`, `RENEW_BACKUP_CODES`, `SET_ALERT_EMAIL`, `REMOVE_ALERT_EMAIL` (any signed-in user).
 - **Workflow:**
   1. The page calls `withProof(wallet, action, parameters)` in `frontend/src/api/stepUp.js`.
   2. That sends `POST /api/auth/step-up` with the action and its parameters.
@@ -895,10 +913,10 @@ section 7; their entries here point there to avoid repeating the same steps.
 
 - **Purpose / problem:** Every important outcome must be traceable afterwards.
 - **What is recorded:**
-  - `authentication_events`: 21 event types (registration, login, logout, revocations, second-step changes,
+  - `authentication_events`: 27 event types (registration, login, logout, revocations, second-step changes,
     remote logouts, flags, emergency stop, delayed actions, API keys), each with status `SUCCESS`,
     `FAILURE` or `BLOCKED`, failure reason, IP address and user agent (cut to 512 characters).
-  - `security_events`: 15 attack types (for example `REPLAY_ATTEMPT`, `SIGNATURE_MISMATCH`,
+  - `security_events`: 16 attack types (for example `REPLAY_ATTEMPT`, `SIGNATURE_MISMATCH`,
     `CSRF_REJECTED`, `RATE_LIMIT_EXCEEDED`, `STEP_UP_FAILED`, `LOW_TRUST_LOGIN`). Descriptions are fixed
     server text, never request data.
 - **How:** `audit/AuditService.java` writes each event in its own transaction. A failed audit write is
@@ -948,9 +966,9 @@ standard error format apply to every feature above. They are described in sectio
 | 6.9 | Own wallet status | Fully implemented |
 | 6.10 | Session management | Fully implemented |
 | 6.11 | Devices | Fully implemented |
-| 6.12 | Sign-in alerts | Fully implemented, in-app only |
+| 6.12 | Sign-in alerts | Fully implemented, in the app and (optional) by e-mail |
 | 6.13 | Second-step management | Fully implemented |
-| 6.14 | Trust score | Fully implemented (fixed rules, untuned defaults) |
+| 6.14 | Trust score | Fully implemented (rules plus an anomaly model in shadow mode; untuned defaults) |
 | 6.15 | Fresh signatures | Fully implemented |
 | 6.16 | Statistics | Fully implemented |
 | 6.17 | User list and on-chain lookup | API complete; some filters not in the UI |
@@ -961,14 +979,15 @@ standard error format apply to every feature above. They are described in sectio
 | 6.22 | Wallet flags | Fully implemented |
 | 6.23 | Emergency stop | Fully implemented (application-level only) |
 | 6.24 | API keys | Fully implemented |
-| 6.25 | Audit and monitoring | Fully implemented (no retention policy) |
+| 6.25 | Audit and monitoring | Fully implemented (optional retention, off by default) |
 | 6.26 | Challenge cleanup | Fully implemented |
 | 6.27 | Startup check and health | Fully implemented |
 | — | Wallet key recovery | Missing (no such flow exists) |
-| — | E-mail or push notifications | Missing |
-| — | Public blockchain deployment | Missing (local chain only) |
-| — | Hosted deployment | Missing (local and Docker only) |
-| — | AI or machine-learning features | Missing (despite the repository name) |
+| — | E-mail alerts | Implemented, optional (no SMS or push) |
+| — | Public blockchain deployment | Prepared for Sepolia (EIP-1559, deploy and check scripts); not deployed yet |
+| — | Hosted deployment | Missing (local and Docker only; images built for GHCR on version tags) |
+| — | Several backend instances | Optional with Redis (shared sessions, limits, locks) |
+| — | Machine learning | Unsupervised anomaly model beside the trust-score rules (shadow by default) |
 
 ---
 
@@ -1300,7 +1319,9 @@ No personal data, IP address or secret is written to the chain.
 ### 9.1 Storage overview
 
 PostgreSQL (hosted on Neon per the README). The schema is owned by Flyway: `V1__init_schema.sql` creates 4
-tables and `V2__security_features.sql` adds 11 tables and new columns. Hibernate only validates the schema.
+tables, `V2__security_features.sql` adds 11 tables and new columns, `V3__unexpected_chain_request.sql` adds an
+attack type, `V4__risk_model.sql` adds the model columns and `risk_models`, and `V5__alert_emails.sql` adds
+`alert_emails` (17 tables in all). Hibernate only validates the schema.
 Times are `TIMESTAMPTZ` stored in UTC (the application clock is `Clock.systemUTC()`). Wallet addresses are
 stored in lower case and checked by `CHECK (… ~ '^0x[0-9a-f]{40}$')`. Allowed values of status-like columns
 are enforced by `CHECK` constraints.
@@ -1398,10 +1419,10 @@ host (Neon), which is outside the code.
   ```
 
   `errorId` is set only for unexpected `500` errors; `Retry-After` is sent with `429`. The full catalog of
-  49 error codes is in `common/ErrorCode.java`.
+  54 error codes is in `common/ErrorCode.java`.
 - A "proof" is `{ "challenge": "…", "signature": "0x…" }` obtained through `POST /api/auth/step-up`.
 
-There are **45 routes under `/api`** plus `GET /actuator/health`. They are listed below.
+There are **52 routes under `/api`** plus `GET /actuator/health`. They are listed below.
 
 ### 10.2 Authentication (`auth/AuthController.java`, `auth/StepUpController.java`)
 
@@ -1438,6 +1459,10 @@ All require `USER` or `ADMIN` and act on the caller's own data only.
 | `POST /api/users/second-step/enable` | `{ code, proof }` | `{ backupCodes: [10 codes] }` | 403, 409, 429 |
 | `POST /api/users/second-step/disable` | `{ code, proof }` | `204` | 403, 409, 429 |
 | `POST /api/users/second-step/backup-codes` | `{ code, proof }` | `{ backupCodes }` | 403, 409, 429 |
+| `GET /api/users/alert-email` | — | `{ available, address (masked), verified, codeExpiresAt }` | — |
+| `POST /api/users/alert-email` | `{ email, proof }` | status; a code is mailed | 400, 403, 409 `ALERT_EMAIL_UNAVAILABLE`, 429 |
+| `POST /api/users/alert-email/verify` | `{ code }` | status | 403, 409 `ALERT_EMAIL_NOT_PENDING` |
+| `POST /api/users/alert-email/remove` | `{ proof }` | `204` | 403, 404, 409 |
 
 ### 10.4 Administration (`admin/AdminController.java`, `admin/ControlsController.java`, `risk/RiskController.java`, `apikey/ApiKeyController.java`, `blockchain/BlockchainController.java`)
 
@@ -1449,7 +1474,10 @@ All require `USER` or `ADMIN` and act on the caller's own data only.
 | `GET /api/admin/authentication-events` | `ADMIN` or `audit:read` | `eventType`, `eventStatus`, `walletAddress`, `from`, `to`, paging | page of events |
 | `GET /api/admin/security-events` | `ADMIN` or `audit:read` | `attackType`, `walletAddress`, `from`, `to`, paging | page of events |
 | `GET /api/admin/statistics` | `ADMIN` or `audit:read` | — | totals and counts by attack type |
-| `GET /api/admin/login-assessments` | `ADMIN` or `audit:read` | `walletAddress`, `decision`, paging | page of assessments |
+| `GET /api/admin/login-assessments` | `ADMIN` or `audit:read` | `walletAddress`, `decision`, `minAnomaly`, paging | page of assessments, with `ruleScore`, `anomalyScore`, `finalScore`, `modelVersion`, `mode`, `topFeatures` |
+| `GET /api/admin/risk-model` | `ADMIN` or `audit:read` | — | `{ version, trainedAt, sampleCount, source, mode }` (read-only) |
+| `GET /api/blockchain/operator` | `ADMIN` | — | `{ operatorAddress, balanceEth, balanceLow }` |
+| `GET /api/admin/api-keys/limits` | `ADMIN` | — | `{ maxDays }` |
 | `GET /api/blockchain/wallet/{address}` | `ADMIN` or `wallet-status:read` | — | on-chain status |
 | `GET /api/blockchain/verify/{address}` | `ADMIN` or `wallet-status:read` | — | `{ walletAddress, valid, reason }` |
 | `POST /api/admin/wallet/{address}/revoke` | `ADMIN` | `{ proof }` | `200 { walletAddress, status, transactionHash }` |
@@ -1699,7 +1727,8 @@ Each mechanism lists what it protects, how it works here, and its limits.
   - the second step is optional;
   - a wallet without it can still sign in with a medium score (50–89);
   - the rules and numbers are untuned defaults;
-  - "new network" is based only on the exact IP address.
+  - "new network" compares exact addresses unless `TRUST_NETWORK_PREFIX_MATCH=true`;
+  - the anomaly model was evaluated on synthetic data only; it runs in shadow mode by default.
 
 ### 12.8 Rate limiting and the IP block
 
@@ -1719,12 +1748,15 @@ Each mechanism lists what it protects, how it works here, and its limits.
   `429` answers carry a `Retry-After` header. The filter matches the decoded, normalised path, so encoded
   tricks such as `%76erify` cannot avoid the limit.
 - **Limits:**
-  - counters are in memory: lost on restart and not shared between instances;
+  - counters are in memory by default: lost on restart and not shared between instances. With the `redis`
+    profile they are shared (Redis counters with an in-memory fallback when Redis is unreachable);
   - the client IP is the connection address. Only the `prod` profile trusts the proxy's `X-Forwarded-*`
     headers. The Docker Compose stack puts the backend behind nginx and sets
     `SESSION_COOKIE_SECURE: "false"` for plain `http://localhost:3000`, which suggests it runs without
-    `prod` (the `prod` profile forces `Secure` cookies). Without `prod`, the backend sees nginx's address
-    for every user, and they all share one set of limits (see 14);
+    `prod`. Docker Compose therefore turns on forwarded headers itself and trusts only nginx's fixed address,
+    and nginx forwards the address it sees. Whether that is each user's own address depends on the Docker host:
+    on Linux with Docker's default NAT, clients keep their addresses and get their own limits; on Docker Desktop
+    (Windows, macOS) every client appears as the Docker gateway, so all users share one set of limits (see 14);
   - with `prod`, only the proxies listed in `TRUSTED_PROXIES` (default: this machine) may report the client
     address. Before 2026-10-21 Tomcat's default list was used, which trusts every private network.
 
@@ -1910,19 +1942,19 @@ technical challenges only.
 
 | # | Limitation | Why it matters | Practical impact | Workaround in the code? |
 |---|---|---|---|---|
-| 1 | Single backend instance: sessions, rate-limit counters and pending second steps are in memory | Cannot scale out or survive restarts | A restart signs everyone out and clears limits; two instances would not share state | No (documented in the README) |
-| 2 | Local Hardhat chain only (chain ID 31337) | No real decentralization or durability | Restarting the node loses all on-chain data | Manual redeploy and data reset (README) |
+| 1 | By default a single backend instance: sessions, rate-limit counters and pending second steps are in memory | Cannot scale out or survive restarts without Redis | Without Redis a restart signs everyone out and clears limits | Optional `redis` profile shares sessions, limits and locks; tested with two instances |
+| 2 | Local Hardhat chain by default (chain ID 31337) | No real decentralization or durability | Restarting the node loses all on-chain data | Sepolia support prepared and rehearsed locally (`docs/SEPOLIA.md`); live deployment not done |
 | 3 | The operator key can still revoke and (when not paused) register at once | A leaked key allows a denial of service | Wallets can be revoked until the guardian replaces the key; access cannot be restored at once | Guardian key; on-chain delay and pause; backend cancels unexpected requests |
 | 4 | No recovery for a lost wallet key | Users can lose access for good | A new wallet means a new, separate account | No |
 | 5 | MetaMask in desktop Chrome required | Excludes mobile and other wallets | Mobile is not supported (README) | No |
-| 6 | Sign-in alerts in the app only | A user who is not signed in sees nothing | Alerts may be noticed late | No |
-| 7 | Trust score uses fixed, untuned rules | Too strict or too lenient in real use | Medium-risk sign-ins without a second step are allowed | Second step is optional; thresholds are configurable |
-| 8 | Rate limits per IP address; in the Docker stack (without the `prod` profile) the backend sees nginx's address | Users behind one address share limits | In Docker, one user's failures can block sign-ins for everyone; behind NAT, many users share a limit | `prod` profile with a trusted HTTPS proxy (not set up in Compose) |
+| 6 | E-mail alerts need an SMTP server and an opted-in, confirmed address | Without them, a user who is not signed in sees nothing | Alerts may be noticed late | Optional e-mail alerts (`MAIL_ENABLED`) |
+| 7 | Trust score rules are untuned; the anomaly model was evaluated on synthetic data only | Too strict or too lenient in real use | Medium-risk sign-ins without a second step are allowed | Thresholds configurable; model in shadow mode until real data is reviewed |
+| 8 | Rate limits per IP address; on Docker Desktop all clients reach nginx from the gateway address | Users behind one address share limits | On Docker Desktop one user's failures can block sign-ins for everyone; behind NAT many users share a limit | Compose trusts nginx's forwarded address; per-client limits work where Docker keeps client addresses (Linux) |
 | 9 | Database mirror is not re-read from the chain on every request | Off-app chain changes are seen late | An open session survives a revocation made directly on-chain for up to about 15 seconds | Background chain check every 15 seconds; every chain read repairs the mirror |
-| 10 | No data deletion or retention | Privacy and growth | IP addresses and user agents stay forever; no "delete my account" | Only challenges are cleaned up |
+| 10 | No account deletion; retention is off by default | Privacy and growth | IP addresses and user agents stay until `RETENTION_DAYS` is set; no "delete my account" | Optional retention job |
 | 11 | No role management | Promoting a user needs a database edit | Admins are fixed at registration | Manual (README) |
-| 12 | Frontend has no automated tests or lint | UI regressions are found by hand | Only the production build checks the frontend | No |
-| 13 | No CI pipeline in the repository | Tests run only when someone runs them | Regressions can be pushed | No |
+| 12 | Frontend tests use a wallet stub, not the real MetaMask extension | Extension quirks are not covered | Real-wallet behaviour checked by hand only | ESLint, 83 unit tests, Playwright (19 UI + 1 full-stack) |
+| 13 | CI is defined but has not run on GitHub yet (branch not pushed) | Workflows are checked only by actionlint | A workflow mistake would show up on the first run | `.github/workflows/ci.yml` |
 | 14 | No hosted deployment or HTTPS setup | Not ready for public use | Local and Docker only | `prod` profile prepared |
 | 15 | Real MetaMask and public-network behaviour not covered by automated tests | Gaps between tests and real use | Wallet UI quirks or network fees are untested | Manual checks only |
 | 16 | `SECOND_STEP_ENCRYPTION_KEY` has no rotation | Changing it breaks all enrolled second steps | Rotation would lock users out of the second step | Administrator reset per user |
@@ -1938,19 +1970,23 @@ risks that follow from the design. Whether they were exploited or observed in pr
 
 | Kind | Location | What it covers |
 |---|---|---|
-| Contract tests (Mocha/Chai via Hardhat) | `contracts/test/WalletRegistry.test.js` | 21 tests: operator and guardian rights, register/revoke rules, delayed reactivation and its cancellation, pause and delayed unpause, a stolen operator key replaced by the guardian, zero address, events, independent records, no funds, exact interface, no return to unregistered, constant gas |
+| Contract tests (Mocha/Chai via Hardhat) | `contracts/test/*.test.js` | 32 tests: 21 in `WalletRegistry.test.js` plus every refusal path, a fast-check model-based test against a JavaScript reference model, and a 2-of-3 multisig guardian; 100 % statement, branch, function and line coverage; Slither with 0 findings. The 21: operator and guardian rights, register/revoke rules, delayed reactivation and its cancellation, pause and delayed unpause, a stolen operator key replaced by the guardian, zero address, events, independent records, no funds, exact interface, no return to unregistered, constant gas |
 | Backend unit tests (`*Test`, Surefire) | `backend/src/test/java/…` | Signature verification, EIP-4361 format, challenge service, address validation, tokens, TOTP, AES-GCM, trust policy and service, rate limiter, fail-closed filters, settings validation, exception mapping, user and admin services |
 | Backend integration tests (`*IT`, Failsafe) | same folder | The real application over HTTP with real wallet signatures against a separate PostgreSQL database (Neon `test` branch), chain client mocked: registration, login, logout, step-up, second step, sessions, alerts, revocation, delayed actions, emergency stop, statistics, API keys, trust score, CSRF, rate limits, authorization matrix, error format, schema, challenge cleanup and concurrency, history scoping |
 | Chain integration test | `blockchain/WalletRegistryClientIT.java` (tag `blockchain`) | `WalletRegistryClient` against a real Hardhat node; runs only with `-Pblockchain-it` |
-| API regression | `postman/BlockAuth.postman_collection.json` | 84 requests: unsigned auth checks, authorization, validation and injection, CSRF, rate limiting, admin endpoints (Postman cannot sign, so signed actions are checked for refusal) |
+| API regression | `postman/BlockAuth.postman_collection.json` | 99 requests: unsigned auth checks, authorization, validation and injection, CSRF, rate limiting, admin endpoints (Postman cannot sign, so signed actions are checked for refusal) |
 | Security scans | `security-tests/zap/` | OWASP ZAP baseline, full and API scans; results table with no High or Medium alerts |
-| Frontend | `npm run build` only | Compilation of the production bundle |
+| Frontend | `frontend/src/**/*.test.*`, `frontend/e2e/` | ESLint (react-hooks, jsx-a11y); 83 Vitest unit and component tests; Playwright: 19 UI tests against the production build with a mocked API (every page at four widths) and one full-stack smoke test against the real backend and chain; a check that the bundle holds no web3 library |
+| Load smoke test | `LoadSmokeIT` (tag `load`) | 50 concurrent logins from 50 proxied addresses |
+| Redis tests | `RedisMultiInstanceIT`, `RedisLeasesIT` (tag `redis`) | Two application instances sharing Redis and the database |
+
+The checks of November 2026 (this branch) are in `docs/VERIFICATION.md`; the table below is the earlier record.
 
 ### 15.2 Checks run while writing this document (19 October 2026)
 
 | Check | Command | Result |
 |---|---|---|
-| Contract tests | `cd contracts; npx hardhat test` | **15 passing** |
+| Contract tests | `cd contracts; npx hardhat test` | **15 passing** (21 since the two-key contract, 32 since November 2026; see `docs/VERIFICATION.md`) |
 | Backend unit tests | `cd backend; .\mvnw.cmd test` | **184 run, 0 failures, 0 errors, 0 skipped** |
 | Backend unit + integration tests | `cd backend; .\mvnw.cmd verify` (Neon `test` branch; chain tests excluded) | **Succeeded:** 184 unit tests and **172 integration tests run, 0 failures, 0 errors, 0 skipped** |
 | Re-run after the attack check (21–22 October 2026) | `cd backend; .\mvnw.cmd clean verify -Pblockchain-it` | **Succeeded:** 184 unit tests and 183 integration tests (including 10 against a real local Hardhat node), 0 failures; see `AttackCheck.md` |
@@ -1990,11 +2026,11 @@ Not run for this document (19 October; the Postman collection was run on 24 Octo
 
 | # | Issue | Location | Impact | Status |
 |---|---|---|---|---|
-| 1 | The repository name says "ai-augmented" and "decentralized", but the code has no AI component, and the contract is controlled by one server key on a local chain | GitHub repository name | Readers may expect features that do not exist | Open (naming only) |
+| 1 | The repository name says "ai-augmented" and "decentralized"; the only machine-learning part is the anomaly model beside the trust-score rules, and the contract runs on a local chain by default | GitHub repository name | Readers may expect more than exists | Open (naming only) |
 | 2 | The contract and the contracts package declare the MIT licence (`SPDX-License-Identifier: MIT`, `"license": "MIT"`), but there is no LICENSE file and the README has no licence section | `contracts/contracts/WalletRegistry.sol`, `contracts/package.json` | The project's licence is unclear | Open |
-| 3 | The ZAP notes say "An ADMIN session has not been scanned", but the results table lists an API scan with an ADMIN session on 2026-10-19 | `security-tests/zap/README.md` | Outdated sentence | Open |
-| 4 | The ZAP notes point to a "Docker" section of the main README; the heading is "Running with Docker" | `security-tests/zap/README.md` | Minor | Open |
-| 5 | The API key form limits the lifetime to 90 days in the browser, while the server's maximum is configurable (`blockauth.security.api-key-max-days`, 1–365) | `frontend/src/pages/AdminControls.jsx` | If the server limit is changed, the form does not follow | Open (the server still enforces its own limit) |
+| 3 | The ZAP notes say "An ADMIN session has not been scanned", but the results table lists an API scan with an ADMIN session on 2026-10-19 | `security-tests/zap/README.md` | Outdated sentence | Fixed (November 2026) |
+| 4 | The ZAP notes point to a "Docker" section of the main README; the heading is "Running with Docker" | `security-tests/zap/README.md` | Minor | Fixed (November 2026) |
+| 5 | The API key form limits the lifetime to 90 days in the browser, while the server's maximum is configurable (`blockauth.security.api-key-max-days`, 1–365) | `frontend/src/pages/AdminControls.jsx` | If the server limit is changed, the form does not follow | Fixed: the form reads `GET /api/admin/api-keys/limits` |
 
 ### 16.2 README compared with the code
 
@@ -2153,7 +2189,7 @@ application database can be changed silently.
 - There is no recovery for a lost wallet key.
 - Only desktop Chrome with MetaMask is supported.
 - Sessions and rate limits are in memory, so only one backend instance can run.
-- The frontend has no automated tests, and there is no CI or hosted deployment.
+- The frontend has unit and end-to-end tests and CI is defined; there is no hosted deployment.
 
 **Current status.** BlockAuth is a working, well-tested reference implementation for local and Docker use.
 It is suitable for study, demonstration and further development. It is not configured for production use or
