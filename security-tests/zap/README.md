@@ -57,6 +57,8 @@ stop responding on 2026-10-18.
 | 2026-10-11 | Full scan with a USER session (cookie and CSRF header added to every request) | 0 | 0 | 7 | 6 |
 | 2026-10-18 | Baseline (passive) | 0 | 0 | 4 | 3 |
 | 2026-10-19 | API scan, 18 read endpoints, ADMIN session, throttled below the rate limit | 0 | 0 | 3 | 2 |
+| 2026-11-23 | Baseline (passive) of the Docker stack (`zaproxy/zap-stable`, `--memory 4g`), before adding Permissions-Policy | 0 | 0 | 5 warnings | — |
+| 2026-11-23 | Same, after adding Permissions-Policy in `nginx.conf`: 0 FAIL, 64 PASS, 4 WARN (Suspicious Comments, Storable and Cacheable Content, Modern Web Application, Cross-Origin-Embedder-Policy missing) | 0 | 0 | 4 warnings | — |
 
 The 2026-10-19 API scan found one real defect: a query parameter without a name (`?=&page=0`) made
 every paged endpoint answer 500 instead of 400. Fixed the same day (the error handler maps it to
@@ -76,6 +78,8 @@ No High or Medium alert was reported. The Low alerts below are accepted for now 
 | Cookie No HttpOnly Flag | `XSRF-TOKEN` | By design. The web app must read this cookie to send the token back in the `X-XSRF-TOKEN` header. It carries no session data; the session cookie `BLOCKAUTH_SESSION` is HttpOnly. |
 | Private IP Disclosure | `/api/users/authentication-history` | The signed-in user's own history shows the address each attempt came from. In Docker that is the nginx container's private address. |
 | Cookie Slack Detector | `/api/auth/csrf` | Informational in nature: responses differ with and without cookies, as expected for a session-based API. |
-| Permissions Policy Header Not Set | static files | The app uses no camera, microphone, location or similar browser features. The header is not in the specified header set; adding it in `nginx.conf` would be a hardening step. |
+| Permissions Policy Header Not Set | static files | Fixed on 2026-11-23: `nginx.conf` now sends `Permissions-Policy`. |
+| Cross-Origin-Embedder-Policy Header Missing | static files | Not added yet: `require-corp` changes how the page may load cross-origin resources and has not been tried with the real MetaMask extension. Candidate hardening step after a real-wallet check. |
+| Storable and Cacheable Content | static files | The SPA's static files are meant to be cacheable; every `/api` answer is `no-store`. |
 | Unexpected Content-Type | `/`, `/api`, unknown paths | The web server answers every path outside `/api/` with the app's page (HTML), as the single-page app needs; `/api` without the slash is such a path. API responses are JSON. |
 | Cross-Origin-Embedder-Policy, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy missing | static files | The app loads nothing from other origins and cannot be framed (`frame-ancestors 'none'`, `X-Frame-Options: DENY`). Adding the three headers in `nginx.conf` would be a hardening step. |
