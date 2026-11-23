@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signAndSubmit } from '../api/auth';
 import { api, configureApi, ensureCsrfToken } from '../api/client';
@@ -87,16 +87,22 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(
     async (message = null) => {
+      // From here on a 401 is the result of this logout, not a session that ended elsewhere.
+      userRef.current = null;
       try {
         await api.post('/api/auth/logout');
       } catch {
         // The local state is cleared regardless; an unreachable server session expires on its own.
       }
-      setUser(null);
-      setNotice(message);
+      // One transition for both: React Router applies navigations as transitions, so clearing the user
+      // urgently would first render the old protected page without a user, whose guard sends it to /login.
+      startTransition(() => {
+        setUser(null);
+        setNotice(message);
+        navigate(message ? '/login' : '/');
+      });
       announce();
       ensureCsrfToken().catch(() => {});
-      navigate(message ? '/login' : '/');
     },
     [navigate, announce],
   );

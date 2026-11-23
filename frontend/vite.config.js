@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    proxy: { '/api': 'http://localhost:8080' },
+    // BACKEND_URL lets a second backend (e.g. on a spare port) serve the dev server; default: localhost:8080.
+    proxy: { '/api': process.env.BACKEND_URL || 'http://localhost:8080' },
   },
 });
