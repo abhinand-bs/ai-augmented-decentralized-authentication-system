@@ -3,8 +3,13 @@
 # Redis must be private (never published beyond localhost or a private network), password-protected, and
 # reached over TLS anywhere outside this machine (REDIS_SSL=true).
 spring:
+  # Only what sessions, limits and leases need: no Redis repositories, no reactive client, no sessions endpoint.
   autoconfigure:
-    exclude: []
+    exclude:
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisReactiveAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisRepositoriesAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.health.DataRedisReactiveHealthContributorAutoConfiguration
+      - org.springframework.boot.session.autoconfigure.SessionsEndpointAutoConfiguration
   data:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
