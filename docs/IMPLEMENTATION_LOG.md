@@ -93,3 +93,19 @@ Not done yet:
    there) would be applied; take a snapshot first.
 Running local services started by this session: containers `blockauth-it-pg` (55433), `blockauth-redis-dev`
 (6380); Hardhat nodes on 8545 and 8546 (detached).
+
+## 4. Second session (2026-11-23, evening)
+
+| Area | Command | Result |
+|---|---|---|
+| Backend | `verify -Pblockchain-it` (local PostgreSQL, Hardhat, Redis) | 214 unit + 219 IT green, 2 min 50 s |
+| CI | `docker run rhysd/actionlint` | 0 findings (one shellcheck warning fixed); all actions pinned to SHAs (resolved with `gh api`) |
+| Contracts | Slither `--fail-medium` with one suppression removed | non-zero exit; restored: 0 results, exit 0 |
+| Contracts | `check-deployment.js` with only `SEPOLIA_RPC_URL` set | 6/6 OK, no key needed; deploying without a key gives a clear error |
+| API | newman with signed sessions | after fixing my environment file (it shadowed the collection's `xsrf`) and spacing runs a minute apart: 101 executed, 261 assertions, 0 failed |
+| Docker | `docker compose build` | **failed** first (A-30: lock file vs npm 10); fixed; all images build |
+| Docker | default stack with a verification override (local DB, other ports) | healthy; SPA, deep links, headers, sign-ins through nginx; client address recorded as the Docker gateway (confirms A-26 wording) |
+| Two instances | `two_instances.mjs` (jars, Redis profile) | 11/11 (first try used `localhost` → `::1`, not a trusted proxy address: fixed the script) |
+| Two instances | `parallel_regs.mjs` ×3 without / with Redis | 59/60 with 9 nonce retries / 60/60 with 0 (A-32) |
+| Clean clone | `clean_clone.sh` | contracts OK; frontend coverage below floor (A-31, fixed with tests); backend: see VERIFICATION.md |
+| Frontend | screenshots at four widths | reviewed; e-mail field unstyled, fixed |
