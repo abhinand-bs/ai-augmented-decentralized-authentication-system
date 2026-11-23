@@ -13,8 +13,8 @@ export default defineConfig({
       include: ['src/**/*.{js,jsx}'],
       exclude: ['src/**/*.test.{js,jsx}', 'src/test/**', 'src/main.jsx'],
       reporter: ['text-summary', 'json-summary', 'html'],
-      // Just below the values measured on 2026-11-23 (36.9 / 33.7 / 29.6 / 36.3); raise as tests are added.
-      thresholds: { statements: 35, branches: 32, functions: 28, lines: 35 },
+      // Just below the values measured on 2026-11-23 (40.4 / 38.3 / 33.0 / 40.0); raise as tests are added.
+      thresholds: { statements: 39, branches: 37, functions: 32, lines: 39 },
     },
   },
 });
