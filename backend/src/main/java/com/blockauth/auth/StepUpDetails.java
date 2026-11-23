@@ -20,6 +20,12 @@ public final class StepUpDetails {
 		return WalletAddresses.checksum(normalizedWallet);
 	}
 
+	/** "j***@example.com [3f9a1c2e]": masked, plus the first 8 hex digits of the address's SHA-256. */
+	public static String email(String normalizedEmail) {
+		return com.blockauth.alert.AlertEmails.mask(normalizedEmail) + " ["
+				+ com.blockauth.common.Tokens.sha256Hex(normalizedEmail).substring(0, 8) + "]";
+	}
+
 	public static String emergencyStop(boolean blockLogins, boolean endUserSessions) {
 		return "(new sign-ins by users " + (blockLogins ? "blocked" : "allowed") + ", open user sessions "
 				+ (endUserSessions ? "ended" : "kept") + ")";

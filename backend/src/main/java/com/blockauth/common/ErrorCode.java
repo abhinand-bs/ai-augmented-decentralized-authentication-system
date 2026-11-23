@@ -44,6 +44,8 @@ public enum ErrorCode {
 	ADMIN_ACTION_ALREADY_PENDING(409, Level.INFO, "The same action is already waiting to take effect."),
 	ADMIN_ACTION_NOT_PENDING(409, Level.INFO, "This action is no longer waiting."),
 	CHAIN_REQUEST_MISSING(409, Level.WARN, "The blockchain holds no matching request: it was cancelled there."),
+	ALERT_EMAIL_UNAVAILABLE(409, Level.INFO, "E-mail alerts are not available on this server."),
+	ALERT_EMAIL_NOT_PENDING(409, Level.INFO, "No verification is waiting. Enter the address again."),
 	PAYLOAD_TOO_LARGE(413, Level.WARN, "Request body too large."),
 	UNSUPPORTED_MEDIA_TYPE(415, Level.DEBUG, "Content-Type must be application/json."),
 	RATE_LIMITED(429, Level.WARN, "Too many requests. Try again later."),

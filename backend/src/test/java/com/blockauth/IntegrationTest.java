@@ -110,7 +110,7 @@ public abstract class IntegrationTest {
 	void resetState() {
 		jdbc.execute("TRUNCATE users, authentication_challenges, authentication_events, security_events, devices, "
 				+ "user_devices, user_sessions, sign_in_alerts, second_factors, backup_codes, wallet_flags, "
-				+ "login_assessments, admin_actions, api_keys, risk_models RESTART IDENTITY CASCADE");
+				+ "login_assessments, admin_actions, api_keys, risk_models, alert_emails RESTART IDENTITY CASCADE");
 		jdbc.execute("INSERT INTO emergency_stop (id, active, block_logins) VALUES (1, FALSE, FALSE) "
 				+ "ON CONFLICT (id) DO UPDATE SET active = FALSE, block_logins = FALSE, reason = NULL, "
 				+ "changed_by = NULL, changed_at = NULL");
@@ -164,6 +164,9 @@ public abstract class IntegrationTest {
 		// Like a real chain, each look finds a newer block.
 		doAnswer(call -> chainBlock.incrementAndGet()).when(registry).blockNumber();
 		doAnswer(call -> chainPaused.get()).when(registry).paused();
+		doAnswer(call -> java.math.BigInteger.TEN.pow(19)).when(registry).operatorBalanceWei();
+		doAnswer(call -> false).when(registry).operatorBalanceLow();
+		doAnswer(call -> "0x" + "ab".repeat(20)).when(registry).operatorAddress();
 		doAnswer(call -> chainUnpauseAt.get()).when(registry).unpauseReadyAt();
 		doAnswer(call -> {
 			boolean allowed = chainPaused.compareAndSet(false, true);

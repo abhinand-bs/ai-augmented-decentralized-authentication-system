@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.blockauth.admin.AdminActionService;
 import com.blockauth.apikey.ApiKeyService;
+import com.blockauth.alert.AlertEmails;
 import com.blockauth.apikey.ApiKeySpec;
 import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.WalletAddresses;
@@ -38,7 +39,7 @@ public class StepUpController {
 	 */
 	public record StepUpRequest(@NotNull(message = "is required") StepUpAction action, String walletAddress,
 			Boolean blockLogins, Boolean endUserSessions, String name, List<String> scopes, Integer days, Long actionId,
-			UUID keyId) {
+			UUID keyId, String email) {
 	}
 
 	public record StepUpChallenge(String challenge, Instant expiresAt) {
@@ -78,7 +79,10 @@ public class StepUpController {
 			// Named from the stored record, so the wallet shows exactly what is being cancelled or revoked.
 			case CANCEL_ADMIN_ACTION -> actions.cancelDetails(required(body.actionId(), "actionId"));
 			case REVOKE_API_KEY -> apiKeys.revokeDetails(required(body.keyId(), "keyId"));
-			case LIFT_EMERGENCY_STOP, ENABLE_SECOND_STEP, DISABLE_SECOND_STEP, RENEW_BACKUP_CODES ->
+			// Masked, with a fingerprint of the full address: the wallet shows which address is meant without
+			// the address itself being stored in the challenge text.
+			case SET_ALERT_EMAIL -> StepUpDetails.email(AlertEmails.normalize(body.email()));
+			case LIFT_EMERGENCY_STOP, ENABLE_SECOND_STEP, DISABLE_SECOND_STEP, RENEW_BACKUP_CODES, REMOVE_ALERT_EMAIL ->
 				StepUpDetails.none();
 		};
 	}

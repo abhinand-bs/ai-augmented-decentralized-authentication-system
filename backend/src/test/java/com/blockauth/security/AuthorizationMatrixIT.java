@@ -26,13 +26,15 @@ class AuthorizationMatrixIT extends IntegrationTest {
 
 	private List<String> userEndpoints() {
 		return List.of("/api/users/me", "/api/users/authentication-history", "/api/users/wallet-status",
-				"/api/users/sessions", "/api/users/devices", "/api/users/alerts", "/api/users/second-step");
+				"/api/users/sessions", "/api/users/devices", "/api/users/alerts", "/api/users/second-step",
+				"/api/users/alert-email");
 	}
 
 	private List<String> adminGets() {
 		return List.of("/api/admin/users", "/api/admin/authentication-events", "/api/admin/security-events",
 				"/api/admin/statistics", "/api/admin/login-assessments", "/api/admin/wallet-flags",
-				"/api/admin/emergency-stop", "/api/admin/actions", "/api/admin/api-keys",
+				"/api/admin/emergency-stop", "/api/admin/actions", "/api/admin/api-keys", "/api/admin/api-keys/limits",
+				"/api/admin/risk-model", "/api/blockchain/operator",
 				"/api/blockchain/wallet/" + victim.checksumAddress(), "/api/blockchain/verify/" + victim.checksumAddress());
 	}
 
@@ -100,11 +102,11 @@ class AuthorizationMatrixIT extends IntegrationTest {
 				+ "and wallet_address = ? and user_id is not null and ip_address is not null",
 				userWallet.address())).isEqualTo(adminGets().size() + adminPosts().size() + 1);
 		assertThat(count("select count(*) from security_events where description like '%Target: GET /api/admin.'"))
-				.isEqualTo(adminGets().size() - 2);
+				.isEqualTo(adminGets().size() - 3);
 		assertThat(count("select count(*) from security_events where description like '%Target: POST /api/admin.'"))
 				.isEqualTo(adminPosts().size());
 		assertThat(count("select count(*) from security_events where description like '%Target: GET /api/blockchain.'"))
-				.isEqualTo(2);
+				.isEqualTo(3);
 	}
 
 	@Test

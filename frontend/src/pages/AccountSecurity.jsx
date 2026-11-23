@@ -9,6 +9,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { TextField } from '../components/TextField';
 import { useAuth } from '../context/AuthContext';
 import { formatDate } from '../utils/format';
+import { AlertEmail } from './AlertEmail';
 
 /**
  * Runs one action at a time for a section, keeping its busy flag and error. A ref guards it, so a double
@@ -358,6 +359,7 @@ export function AccountSecurity() {
       <Sessions sessions={sessions} onChange={reloadAll} />
       <Devices devices={devices} onChange={reloadAll} />
       <SecondStep onChange={reloadAll} />
+      <AlertEmail />
     </>
   );
 }

@@ -15,19 +15,19 @@ import com.blockauth.common.Tokens;
  * back to check codes, so it is encrypted rather than hashed; a copy of the database alone is useless
  * without the key, which lives only in the environment.
  */
-final class SecretBox {
+public final class SecretBox {
 
 	private static final int IV_BYTES = 12;
 	private static final int TAG_BITS = 128;
 
 	private final SecretKeySpec key;
 
-	SecretBox(byte[] key) {
+	public SecretBox(byte[] key) {
 		this.key = new SecretKeySpec(key, "AES");
 	}
 
 	/** Base64 of IV followed by ciphertext and tag. */
-	String seal(byte[] plaintext) {
+	public String seal(byte[] plaintext) {
 		try {
 			byte[] iv = Tokens.randomBytes(IV_BYTES);
 			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
@@ -42,7 +42,7 @@ final class SecretBox {
 	}
 
 	/** @throws IllegalStateException if the value was altered or sealed with another key */
-	byte[] open(String sealed) {
+	public byte[] open(String sealed) {
 		try {
 			byte[] data = Base64.getDecoder().decode(sealed);
 			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");

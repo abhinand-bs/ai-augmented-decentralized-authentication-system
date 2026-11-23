@@ -33,6 +33,20 @@ spring:
   jackson:
     deserialization:
       fail-on-unknown-properties: true
+  # E-mail alerts (blockauth.mail.enabled). STARTTLS is required unless MAIL_STARTTLS_REQUIRED=false (only for a
+  # local mail catcher such as Mailpit); connection and read time out after 5 s.
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: ${MAIL_STARTTLS_REQUIRED:true}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
   task:
     scheduling:
       pool:
@@ -104,6 +118,10 @@ blockauth:
       gas-limit-cap: ${BLOCKCHAIN_GAS_LIMIT_CAP:200000}
       max-fee-gwei: ${BLOCKCHAIN_MAX_FEE_GWEI:200}
       low-balance-eth: ${BLOCKCHAIN_LOW_BALANCE_ETH:0.05}
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:}
+    max-alerts-per-hour: ${MAIL_MAX_ALERTS_PER_HOUR:3}
   # Optional retention of sign-in assessments and audit events, in days. 0 keeps everything (the default).
   retention:
     days: ${RETENTION_DAYS:0}

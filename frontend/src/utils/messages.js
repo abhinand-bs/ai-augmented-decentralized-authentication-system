@@ -49,6 +49,8 @@ export const MESSAGES = {
   PAYLOAD_TOO_LARGE: 'The request was too large.',
   INVALID_API_KEY: 'The API key is missing, invalid, expired or revoked.',
   CSRF_INVALID: 'The request could not be verified. Reload the page and try again.',
+  ALERT_EMAIL_UNAVAILABLE: 'E-mail alerts are not switched on for this server.',
+  ALERT_EMAIL_NOT_PENDING: 'No confirmation code is waiting. Enter the address again to get a new one.',
   CHAIN_REQUEST_MISSING: 'The blockchain no longer holds this request: it was cancelled there.',
   NETWORK: 'Cannot reach the server.',
   TIMEOUT: 'The server did not answer in time.',

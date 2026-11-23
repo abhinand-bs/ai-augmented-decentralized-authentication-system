@@ -70,3 +70,26 @@ Commits on `feature/risk-scoring-hardening`: `cab339c` (contracts), `af82f5a` (f
 | Backend | `RedisMultiInstanceIT` (2 app contexts, Redis 7.4 container on 127.0.0.1:6380 with password) | **5/5** after fixing two test mistakes (TOTP code reused within its step; health probe sent a session cookie) |
 | Backend | `RedisLeasesIT` | 3/3 |
 | Docker | `docker compose config` default, `--profile mail`, `--profile redis`, redis + `docker-compose.redis.yml` | all valid; default services unchanged (hardhat, backend, frontend) |
+| Backend | `AlertEmailIT` (mail sender mocked), `SchemaIT`, `AuthorizationMatrixIT` with V5 | 6/6, 7/7, 6/6 (after fixing three test mistakes: verification mail also audited as sent; limiter cleared inside the loop; per-wallet challenge limit) |
+| Frontend | lint, `vitest run`, `playwright test` after the alert e-mail UI | lint clean, 83 unit, 19 e2e passed |
+
+## 3. Open items / next steps (resume here)
+
+Done on the branch: safety snapshot, baseline, audit (docs/AUDIT.md), fixes, risk model (V4), contract
+security (coverage 100 %, fast-check, Slither, multisig double), frontend tests (Vitest, Playwright UI +
+full-stack smoke), chain client for public networks (EIP-1559, Sepolia rehearsal), Redis (profile `redis`),
+e-mail alerts (V5, `MAIL_ENABLED`).
+
+Not done yet:
+1. Full `mvnw verify` after the e-mail commit (only the affected ITs were run), and `-Pblockchain-it` again.
+2. CI/CD: `.github/workflows/ci.yml`, `dependabot.yml`, GHCR on tags, README badge; actionlint.
+3. Docs: `.env.example` (trust, anomaly, chain tx, Redis, mail, retention, DB_POOL_SIZE settings),
+   `docs/RISK_MODEL.md`, `docs/SEPOLIA.md`, FeatureGuide/CompleteDetails/README updates (no-AI statements,
+   counts, limitations, Docker rate-limit wording A-26, "how to explain the risk model"), Postman requests
+   for the new routes (risk-model, api-keys/limits, blockchain/operator, alert-email x4) and a newman run.
+4. Phase 5: `docs/VERIFICATION.md`, two-instance check with real jars (20 parallel registrations), clean-clone
+   check, Docker build/up, screenshots (`SCREENSHOTS=1 npm run test:e2e`), ZAP.
+5. Ask Sunny before any backend start against the main Neon database: V4 and V5 (and V2/V3 if still pending
+   there) would be applied; take a snapshot first.
+Running local services started by this session: containers `blockauth-it-pg` (55433), `blockauth-redis-dev`
+(6380); Hardhat nodes on 8545 and 8546 (detached).

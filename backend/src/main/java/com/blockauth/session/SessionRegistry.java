@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.jspecify.annotations.NonNull;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -37,10 +38,12 @@ public class SessionRegistry {
 	private final SecuritySettings settings;
 	private final Clock clock;
 	private final TransactionTemplate transaction;
+	private final ApplicationEventPublisher events;
 
 	public SessionRegistry(DeviceRepository devices, UserDeviceRepository links, UserSessionRepository sessions,
 			SignInAlertRepository alerts, DeviceCookie cookie, SecuritySettings settings, Clock clock,
-			@NonNull PlatformTransactionManager transactionManager) {
+			@NonNull PlatformTransactionManager transactionManager, ApplicationEventPublisher events) {
+		this.events = events;
 		this.devices = devices;
 		this.links = links;
 		this.sessions = sessions;
@@ -89,6 +92,8 @@ public class SessionRegistry {
 				.save(new UserSession(user.getId(), device.getId(), client.ip(), secondStepPassed, now));
 			if (alert) {
 				alerts.save(new SignInAlert(user.getId(), session.getId(), now));
+				events.publishEvent(new NewDeviceSignIn(user.getId(), user.getWalletAddress(), device.getLabel(),
+						client.ip(), now));
 			}
 			return new Started(session.getId(), device.getId(), newDevice);
 		});

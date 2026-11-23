@@ -81,6 +81,7 @@ export async function mockApi(page_, { user = null, role = 'USER' } = {}) {
       '/api/users/devices': [{ id: 'd1', label: 'Chrome on Windows', firstSeenAt: NOW(), lastSeenAt: NOW(), trustedUntil: null, current: true }],
       '/api/users/alerts': [],
       '/api/users/second-step': { enabled: false, backupCodesLeft: 0 },
+      '/api/users/alert-email': { available: true, address: 'o***@example.com', verified: true, codeExpiresAt: null },
       '/api/admin/statistics': { totalUsers: 3, activeWallets: 2, revokedWallets: 1, authenticationAttempts: 10, successfulAttempts: 7, failedAttempts: 2, blockedAttempts: 1, invalidSignatureAttempts: 1, replayAttempts: 1, revokedWalletAttempts: 0, securityEventsTotal: 2, securityEventsByType: { REPLAY_ATTEMPT: 1, CSRF_REJECTED: 1 } },
       '/api/admin/users': page([{ id: 'u-2', walletAddress: long, role: 'USER', status: 'ACTIVE', createdAt: NOW(), updatedAt: NOW() }]),
       '/api/admin/actions': page([]),

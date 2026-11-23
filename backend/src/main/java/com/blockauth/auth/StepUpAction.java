@@ -18,7 +18,9 @@ public enum StepUpAction {
 	CANCEL_ADMIN_ACTION("Cancel the waiting administrator action", true),
 	ENABLE_SECOND_STEP("Turn on the second step for this wallet", false),
 	DISABLE_SECOND_STEP("Turn off the second step for this wallet", false),
-	RENEW_BACKUP_CODES("Replace the backup codes of this wallet", false);
+	RENEW_BACKUP_CODES("Replace the backup codes of this wallet", false),
+	SET_ALERT_EMAIL("Send sign-in alerts for this wallet to the e-mail address", false),
+	REMOVE_ALERT_EMAIL("Stop e-mail sign-in alerts for this wallet", false);
 
 	private final String label;
 	private final boolean adminOnly;

@@ -25,13 +25,13 @@ class SchemaIT extends IntegrationTest {
 	void flywayCreatedTheTablesWithItsMigrations() {
 		assertThat(jdbc.queryForList("select script from flyway_schema_history where success order by installed_rank",
 				String.class)).containsExactly("V1__init_schema.sql", "V2__security_features.sql",
-						"V3__unexpected_chain_request.sql", "V4__risk_model.sql");
+						"V3__unexpected_chain_request.sql", "V4__risk_model.sql", "V5__alert_emails.sql");
 		assertThat(jdbc.queryForList("select table_name from information_schema.tables where table_schema = 'public' "
 				+ "and table_name <> 'flyway_schema_history'", String.class)).containsExactlyInAnyOrder("users",
 						"authentication_challenges", "authentication_events", "security_events", "devices",
 						"user_devices", "user_sessions", "sign_in_alerts", "second_factors", "backup_codes",
 						"wallet_flags", "login_assessments", "emergency_stop", "admin_actions", "api_keys",
-						"risk_models");
+						"risk_models", "alert_emails");
 	}
 
 	@Test
@@ -49,7 +49,7 @@ class SchemaIT extends IntegrationTest {
 	void timestampsAreStoredWithTimeZone() {
 		assertThat(jdbc.queryForList("select data_type from information_schema.columns where table_schema = 'public' "
 				+ "and table_name <> 'flyway_schema_history' and column_name like '%\\_at'", String.class))
-				.hasSize(29).containsOnly("timestamp with time zone");
+				.hasSize(32).containsOnly("timestamp with time zone");
 		assertThat(count("select count(*) from information_schema.columns where table_schema = 'public' "
 				+ "and table_name <> 'flyway_schema_history' and data_type = 'timestamp without time zone'")).isZero();
 	}
