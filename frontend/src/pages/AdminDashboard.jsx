@@ -1,8 +1,20 @@
 import { useApi } from '../api/useApi';
-import { ErrorAlert } from '../components/Alert';
+import { Alert, ErrorAlert } from '../components/Alert';
 import { Spinner } from '../components/Spinner';
 import { StatCard } from '../components/StatCard';
 import { label } from '../utils/format';
+
+/** Warns before registry writes start failing because the operator account cannot pay for gas. */
+function OperatorBalance() {
+  const operator = useApi('/api/blockchain/operator');
+  if (!operator.data?.balanceLow) return null;
+  return (
+    <Alert kind="warn">
+      The operator account&apos;s balance is low ({operator.data.balanceEth} ETH). Registrations and revocations fail
+      once it cannot pay for gas: fund <span className="mono address-full">{operator.data.operatorAddress}</span>.
+    </Alert>
+  );
+}
 
 export function AdminDashboard() {
   const { data, error, loading, reload } = useApi('/api/admin/statistics');
@@ -18,7 +30,8 @@ export function AdminDashboard() {
         </button>
       </div>
       <p className="lead">Totals since the system was set up.</p>
-      <ErrorAlert error={error} />
+      <OperatorBalance />
+      <ErrorAlert error={error} onRetry={reload} />
       {loading && !data && <Spinner label="Loading statistics…" />}
       {data && (
         <>

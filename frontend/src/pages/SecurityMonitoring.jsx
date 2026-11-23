@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { query, useApi } from '../api/useApi';
 import { Address } from '../components/Address';
 import { AddressField } from '../components/AddressField';
+import { ErrorAlert } from '../components/Alert';
 import { DataTable } from '../components/DataTable';
 import { Pagination } from '../components/Pagination';
 import { SelectFilter } from '../components/SelectFilter';
+import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { ATTACK_TYPES, EVENT_TYPES } from '../utils/events';
 import { formatDate, isPartialAddress, isValidAddress, label } from '../utils/format';
@@ -134,20 +136,71 @@ function AuthenticationEvents() {
   );
 }
 
+const MIN_ANOMALY = ['0.5', '0.6', '0.7', '0.8', '0.9'];
+
+const MODE_TEXT = {
+  OFF: 'Off: the model is not consulted.',
+  SHADOW: 'Shadow: scores are stored and shown here, but never change a decision.',
+  ENFORCE: 'Enforce: an unusual sign-in can lose up to the configured penalty; it can never gain points.',
+};
+
+/** Read-only state of the learned model. Nothing in the app can change or retrain it. */
+function ModelStatus() {
+  const status = useApi('/api/admin/risk-model');
+  const data = status.data;
+  return (
+    <section className="result" aria-labelledby="model-title">
+      <h2 id="model-title">Anomaly model</h2>
+      <ErrorAlert error={status.error} onRetry={status.reload} />
+      {status.loading && !data && <Spinner label="Loading…" />}
+      {data && (
+        <dl className="facts">
+          <div>
+            <dt>Mode</dt>
+            <dd>
+              <StatusBadge value={data.mode} kind={data.mode === 'ENFORCE' ? 'warn' : 'neutral'} /> {MODE_TEXT[data.mode]}
+            </dd>
+          </div>
+          <div>
+            <dt>Version</dt>
+            <dd className="mono">{data.version ?? 'Not trained yet'}</dd>
+          </div>
+          <div>
+            <dt>Trained</dt>
+            <dd>{data.trainedAt ? formatDate(data.trainedAt) : '—'}</dd>
+          </div>
+          <div>
+            <dt>Training data</dt>
+            <dd>
+              {data.sampleCount
+                ? `${data.sampleCount} ${data.source === 'REAL' ? 'recorded ordinary sign-ins' : 'synthetic sign-ins (cold start)'}`
+                : '—'}
+            </dd>
+          </div>
+        </dl>
+      )}
+    </section>
+  );
+}
+
 function SignInRisk() {
   const [page, setPage] = useState(0);
   const [decision, setDecision] = useState('');
+  const [minAnomaly, setMinAnomaly] = useState('');
   const wallet = useWalletFilter(() => setPage(0));
   const assessments = useApi(
-    `/api/admin/login-assessments${query({ page, size: 20, decision, walletAddress: wallet.walletAddress })}`,
+    `/api/admin/login-assessments${query({ page, size: 20, decision, minAnomaly, walletAddress: wallet.walletAddress })}`,
   );
   return (
     <>
       <p className="muted">
         Every sign-in whose signature checked out gets a trust score from 100 down: a new device, a new network, a
         flagged wallet, repeated failures from the same address, or a device shared with a flagged wallet each lower it.
-        High scores sign in; lower ones need the second step, or are refused when the wallet has none.
+        High scores sign in; lower ones need the second step, or are refused when the wallet has none. Beside these
+        rules an unsupervised anomaly model rates how unusual the sign-in is (0.5 is ordinary, 1 is a clear outlier).
+        It is a risk indicator, never proof of identity.
       </p>
+      <ModelStatus />
       <div className="filters">
         <SelectFilter
           label="Decision"
@@ -159,6 +212,23 @@ function SignInRisk() {
           options={DECISIONS}
           allLabel="Any decision"
         />
+        <label className="field">
+          Anomaly at least
+          <select
+            value={minAnomaly}
+            onChange={(event) => {
+              setMinAnomaly(event.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="">Any</option>
+            {MIN_ANOMALY.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
         {wallet.field}
       </div>
       <DataTable
@@ -172,7 +242,24 @@ function SignInRisk() {
           { key: 'assessedAt', header: 'Time', render: (row) => formatDate(row.assessedAt) },
           { key: 'walletAddress', header: 'Wallet', render: (row) => <Address value={row.walletAddress} /> },
           { key: 'ipAddress', header: 'IP address', render: (row) => <span className="mono">{row.ipAddress}</span> },
-          { key: 'score', header: 'Score', render: (row) => <span className="mono">{row.score}</span> },
+          { key: 'ruleScore', header: 'Rules', render: (row) => <span className="mono">{row.ruleScore ?? row.score}</span> },
+          {
+            key: 'anomalyScore',
+            header: 'Anomaly',
+            render: (row) => <span className="mono">{row.anomalyScore == null ? '—' : row.anomalyScore.toFixed(2)}</span>,
+          },
+          { key: 'score', header: 'Final', render: (row) => <span className="mono">{row.finalScore ?? row.score}</span> },
+          {
+            key: 'topFeatures',
+            header: 'Unusual in',
+            wrap: true,
+            render: (row) => (row.topFeatures?.length ? row.topFeatures.map(label).join(', ') : '—'),
+          },
+          {
+            key: 'modelVersion',
+            header: 'Model',
+            render: (row) => (row.modelVersion ? <span className="mono">v{row.modelVersion} {label(row.mode)}</span> : '—'),
+          },
           {
             key: 'rules',
             header: 'Why',

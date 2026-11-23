@@ -48,6 +48,16 @@ class ApiKeyIT extends IntegrationTest {
 	}
 
 	@Test
+	void theFormReadsTheServerLimitAndOnlyAdministratorsMay() {
+		Api.Response limits = admin.get("/api/admin/api-keys/limits");
+
+		assertThat(limits.status()).isEqualTo(200);
+		assertShape(limits.body(), "maxDays");
+		assertThat(limits.body().get("maxDays").asInt()).isEqualTo(90);
+		assertThat(registeredAndLoggedIn(new TestWallet()).get("/api/admin/api-keys/limits").status()).isEqualTo(403);
+	}
+
+	@Test
 	void theTokenIsShownOnceAndOnlyAHashOfItsSecretIsStored() {
 		Api.Response created = create("Nightly report", List.of("audit:read", "users:read"), 30);
 

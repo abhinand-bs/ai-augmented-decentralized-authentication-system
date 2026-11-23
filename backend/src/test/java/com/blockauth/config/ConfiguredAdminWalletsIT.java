@@ -1,9 +1,13 @@
 package com.blockauth.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -30,6 +34,10 @@ class ConfiguredAdminWalletsIT {
 
 	@Test
 	void everyConfiguredAdministratorWalletIsCreatedAsAdminAndNobodyElseIs() {
+		// It checks the developer's own configuration; a fresh checkout (CI) has none to check.
+		assumeTrue(Files.exists(Path.of("..", ".env.local")) || Files.exists(Path.of(".env.local"))
+				|| System.getenv("BLOCKAUTH_ADMIN_WALLETS") != null,
+				"no .env.local and no BLOCKAUTH_ADMIN_WALLETS: there is no developer configuration to check");
 		new ApplicationContextRunner().withInitializer(new ConfigDataApplicationContextInitializer())
 				.withUserConfiguration(Config.class).run(context -> {
 					assertThat(context).hasNotFailed();

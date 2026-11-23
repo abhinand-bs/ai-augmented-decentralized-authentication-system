@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { signAndSubmit } from '../api/auth';
+import { TxHash } from '../components/TxHash';
 import { Alert } from '../components/Alert';
 import { SignChallengeFlow } from '../components/SignChallengeFlow';
 import { useAuth } from '../context/AuthContext';
@@ -47,7 +48,9 @@ export function Register() {
                 {registered.transactionHash && (
                   <>
                     <dt>Transaction</dt>
-                    <dd className="mono">{registered.transactionHash}</dd>
+                    <dd>
+                      <TxHash value={registered.transactionHash} />
+                    </dd>
                   </>
                 )}
               </dl>

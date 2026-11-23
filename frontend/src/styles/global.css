@@ -1048,3 +1048,8 @@ tbody.is-stale {
     animation-duration: 1.5s;
   }
 }
+
+.tx-hash {
+  display: inline;
+  overflow-wrap: anywhere;
+}

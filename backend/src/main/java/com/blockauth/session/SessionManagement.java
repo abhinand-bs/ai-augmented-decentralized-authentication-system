@@ -9,9 +9,12 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.blockauth.audit.AuditService;
 import com.blockauth.audit.AuthEventStatus;
@@ -24,6 +27,10 @@ import com.blockauth.security.BlockAuthPrincipal;
 /**
  * What a signed-in user can see and do about their own sessions, devices and sign-in alerts. Every
  * method is scoped to the caller: an id belonging to someone else is reported as not found.
+ * <p>
+ * Changes that are audited commit first and are audited afterwards. The audit write takes its own
+ * connection; doing it inside the change's transaction would hold two of the pool's connections on one
+ * thread, and a handful of such requests at once could use up the pool.
  */
 @Service
 public class SessionManagement {
@@ -49,10 +56,13 @@ public class SessionManagement {
 	private final AuditService audit;
 	private final Clock clock;
 	private final Duration sessionTimeout;
+	private final TransactionTemplate transaction;
 
 	public SessionManagement(UserSessionRepository sessions, UserDeviceRepository links, DeviceRepository devices,
 			SignInAlertRepository alerts, AuditService audit, Clock clock,
-			@Value("${server.servlet.session.timeout:30m}") Duration sessionTimeout) {
+			@Value("${server.servlet.session.timeout:30m}") Duration sessionTimeout,
+			@NonNull PlatformTransactionManager transactionManager) {
+		this.transaction = new TransactionTemplate(transactionManager);
 		this.sessions = sessions;
 		this.links = links;
 		this.devices = devices;
@@ -127,15 +137,16 @@ public class SessionManagement {
 	}
 
 	/** Forgets a device: its sessions end, its trust ends, and the next sign-in on it counts as new. */
-	@Transactional
 	public void removeDevice(BlockAuthPrincipal principal, UUID deviceId, ClientInfo client) {
-		if (deviceId.equals(currentDevice(principal))) {
-			throw new BlockAuthException(ErrorCode.CURRENT_DEVICE);
-		}
-		UserDevice link = links.findByUserIdAndDeviceId(principal.userId(), deviceId)
-			.filter(d -> !d.isRemoved())
-			.orElseThrow(() -> new BlockAuthException(ErrorCode.RESOURCE_NOT_FOUND));
-		forget(principal.userId(), link);
+		transaction.executeWithoutResult(status -> {
+			if (deviceId.equals(currentDevice(principal))) {
+				throw new BlockAuthException(ErrorCode.CURRENT_DEVICE);
+			}
+			UserDevice link = links.findByUserIdAndDeviceId(principal.userId(), deviceId)
+				.filter(d -> !d.isRemoved())
+				.orElseThrow(() -> new BlockAuthException(ErrorCode.RESOURCE_NOT_FOUND));
+			forget(principal.userId(), link);
+		});
 		audit.recordAuthEvent(AuthEventType.DEVICE_REMOVED, AuthEventStatus.SUCCESS, principal.walletAddress(),
 				principal.userId(), null, null, client);
 	}
@@ -148,19 +159,20 @@ public class SessionManagement {
 	}
 
 	/** "This was not me": ends that session and forgets its device. */
-	@Transactional
 	public void rejectAlert(BlockAuthPrincipal principal, Long alertId, ClientInfo client) {
-		SignInAlert alert = openAlert(principal, alertId);
-		UserSession session = sessions.findById(alert.getSessionId()).orElseThrow();
-		if (session.getId().equals(principal.sessionId())) {
-			throw new BlockAuthException(ErrorCode.CURRENT_DEVICE);
-		}
-		sessions.end(session.getId(), SessionEndReason.REMOTE_LOGOUT, clock.instant());
-		links.findByUserIdAndDeviceId(principal.userId(), session.getDeviceId())
-			.filter(d -> !d.isRemoved())
-			.ifPresent(link -> forget(principal.userId(), link));
-		alert.resolve(SignInAlert.Resolution.SIGNED_OUT, clock.instant());
-		alerts.save(alert);
+		transaction.executeWithoutResult(status -> {
+			SignInAlert alert = openAlert(principal, alertId);
+			UserSession session = sessions.findById(alert.getSessionId()).orElseThrow();
+			if (session.getId().equals(principal.sessionId())) {
+				throw new BlockAuthException(ErrorCode.CURRENT_DEVICE);
+			}
+			sessions.end(session.getId(), SessionEndReason.REMOTE_LOGOUT, clock.instant());
+			links.findByUserIdAndDeviceId(principal.userId(), session.getDeviceId())
+				.filter(d -> !d.isRemoved())
+				.ifPresent(link -> forget(principal.userId(), link));
+			alert.resolve(SignInAlert.Resolution.SIGNED_OUT, clock.instant());
+			alerts.save(alert);
+		});
 		audit.recordAuthEvent(AuthEventType.REMOTE_LOGOUT, AuthEventStatus.SUCCESS, principal.walletAddress(),
 				principal.userId(), null, null, client);
 	}

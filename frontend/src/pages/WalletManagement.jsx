@@ -5,6 +5,7 @@ import { withProof } from '../api/stepUp';
 import { query, useApi } from '../api/useApi';
 import { Address } from '../components/Address';
 import { AddressField } from '../components/AddressField';
+import { TxHash } from '../components/TxHash';
 import { Alert, ErrorAlert } from '../components/Alert';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DataTable } from '../components/DataTable';
@@ -166,7 +167,9 @@ export function WalletManagement() {
               <dt>Wallet</dt>
               <dd className="mono">{changed.walletAddress}</dd>
               <dt>Transaction</dt>
-              <dd className="mono">{changed.transactionHash}</dd>
+              <dd>
+                <TxHash value={changed.transactionHash} />
+              </dd>
             </dl>
           </details>
         </Alert>

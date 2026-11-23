@@ -44,6 +44,15 @@ public class ApiKeyController {
 		this.settings = settings;
 	}
 
+	/** The server's limits, so the form can follow them instead of hard-coding a copy. */
+	public record Limits(int maxDays) {
+	}
+
+	@GetMapping("/limits")
+	Limits limits() {
+		return new Limits(settings.apiKeyMaxDays());
+	}
+
 	@GetMapping
 	PageResponse<KeyView> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
 		return keys.list(PageResponse.request(page, size, "createdAt"));

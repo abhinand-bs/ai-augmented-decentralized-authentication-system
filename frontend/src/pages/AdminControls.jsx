@@ -332,8 +332,10 @@ function ApiKeys() {
   const [scopes, setScopes] = useState([]);
   const [days, setDays] = useState('30');
   const [revoking, setRevoking] = useState(null);
-  // The same range the server enforces by default (blockauth.security.api-key-max-days); the server checks again.
-  const daysValid = /^\d+$/.test(days) && Number(days) >= 1 && Number(days) <= 90;
+  // The server's own limit (blockauth.security.api-key-max-days); the server checks again on creation.
+  const limits = useApi('/api/admin/api-keys/limits');
+  const maxDays = limits.data?.maxDays ?? null;
+  const daysValid = maxDays !== null && /^\d+$/.test(days) && Number(days) >= 1 && Number(days) <= maxDays;
 
   function toggle(scope) {
     setScopes((current) => (current.includes(scope) ? current.filter((s) => s !== scope) : [...current, scope]));
@@ -385,8 +387,8 @@ function ApiKeys() {
           onChange={setDays}
           inputMode="numeric"
           maxLength={3}
-          hint="1 to 90."
-          error={days !== '' && !daysValid ? 'Enter a whole number from 1 to 90.' : null}
+          hint={maxDays ? `1 to ${maxDays}.` : 'Loading the limit…'}
+          error={maxDays && days !== '' && !daysValid ? `Enter a whole number from 1 to ${maxDays}.` : null}
         />
         <div className="actions">
           <button className="button" type="submit" disabled={busy || !name.trim() || scopes.length === 0 || !daysValid}>
