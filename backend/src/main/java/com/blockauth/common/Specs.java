@@ -15,6 +15,10 @@ public final class Specs {
 		return (root, query, cb) -> value == null ? cb.conjunction() : cb.equal(root.get(field), value);
 	}
 
+	public static <T> @NonNull Specification<T> atLeast(String field, Double value) {
+		return (root, query, cb) -> value == null ? cb.conjunction() : cb.greaterThanOrEqualTo(root.get(field), value);
+	}
+
 	public static <T> @NonNull Specification<T> between(String field, Instant from, Instant to) {
 		if (from != null && to != null && from.isAfter(to)) {
 			throw BlockAuthException.invalid("from", "must not be after 'to'");

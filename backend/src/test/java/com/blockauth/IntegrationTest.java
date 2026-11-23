@@ -110,7 +110,7 @@ public abstract class IntegrationTest {
 	void resetState() {
 		jdbc.execute("TRUNCATE users, authentication_challenges, authentication_events, security_events, devices, "
 				+ "user_devices, user_sessions, sign_in_alerts, second_factors, backup_codes, wallet_flags, "
-				+ "login_assessments, admin_actions, api_keys RESTART IDENTITY CASCADE");
+				+ "login_assessments, admin_actions, api_keys, risk_models RESTART IDENTITY CASCADE");
 		jdbc.execute("INSERT INTO emergency_stop (id, active, block_logins) VALUES (1, FALSE, FALSE) "
 				+ "ON CONFLICT (id) DO UPDATE SET active = FALSE, block_logins = FALSE, reason = NULL, "
 				+ "changed_by = NULL, changed_at = NULL");

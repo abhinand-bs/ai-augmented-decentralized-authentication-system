@@ -150,7 +150,8 @@ class TrustScoreIT extends IntegrationTest {
 		assertThat(page.status()).isEqualTo(200);
 		JsonNode items = page.body().get("items");
 		assertThat(items).hasSize(2);
-		assertShape(items.get(0), "id", "walletAddress", "ipAddress", "score", "rules", "decision", "assessedAt");
+		assertShape(items.get(0), "id", "walletAddress", "ipAddress", "score", "rules", "decision", "assessedAt",
+				"ruleScore", "anomalyScore", "finalScore", "modelVersion", "mode", "topFeatures");
 		assertThat(items.get(0).get("score").asInt()).isEqualTo(70);
 		assertThat(admin.get("/api/admin/login-assessments?decision=REFUSE").body().get("items")).isEmpty();
 		assertThat(user.get("/api/admin/login-assessments").status()).isEqualTo(403);

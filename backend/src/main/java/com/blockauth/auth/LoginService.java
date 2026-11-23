@@ -104,7 +104,7 @@ public class LoginService {
 			Optional<Device> device = devices.recognise(http);
 			boolean enrolled = secondStep.isEnabled(user.getId());
 			TrustService.Assessment assessment = trust.assess(user.getId(), wallet,
-					device.map(Device::getId).orElse(null), client.ip(), enrolled);
+					device.map(Device::getId).orElse(null), client.ip(), client.userAgent(), enrolled);
 			switch (assessment.decision()) {
 				case REFUSE -> throw new BlockAuthException(assessment.failure());
 				case SECOND_STEP -> {

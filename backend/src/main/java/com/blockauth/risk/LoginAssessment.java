@@ -12,6 +12,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.ColumnTransformer;
+
 /** The trust score of one sign-in, with the rules that lowered it and the decision taken. */
 @Entity
 @Table(name = "login_assessments")
@@ -46,11 +48,48 @@ public class LoginAssessment {
 	@Column(name = "assessed_at", nullable = false, updatable = false)
 	private Instant assessedAt;
 
+	/** The model's inputs as a JSON object of feature name to number; never raw addresses or user agents. */
+	@Column(columnDefinition = "jsonb", updatable = false)
+	@ColumnTransformer(write = "cast(? as jsonb)")
+	private String features;
+
+	@Column(name = "rule_score", updatable = false)
+	private Integer ruleScore;
+
+	@Column(name = "anomaly_score", updatable = false)
+	private Double anomalyScore;
+
+	@Column(name = "final_score", updatable = false)
+	private Integer finalScore;
+
+	@Column(name = "model_version", updatable = false)
+	private Integer modelVersion;
+
+	@Column(updatable = false, length = 8)
+	private String mode;
+
+	@Column(name = "top_features", updatable = false, length = 80)
+	private String topFeatures;
+
 	protected LoginAssessment() {
 	}
 
 	LoginAssessment(String walletAddress, UUID userId, UUID deviceId, String ipAddress, int score, String rules,
 			TrustPolicy.Decision decision, Instant assessedAt) {
+		this(walletAddress, userId, deviceId, ipAddress, score, rules, decision, assessedAt, null, null, null, null,
+				null, null, null);
+	}
+
+	LoginAssessment(String walletAddress, UUID userId, UUID deviceId, String ipAddress, int score, String rules,
+			TrustPolicy.Decision decision, Instant assessedAt, String features, Integer ruleScore, Double anomalyScore,
+			Integer finalScore, Integer modelVersion, String mode, String topFeatures) {
+		this.features = features;
+		this.ruleScore = ruleScore;
+		this.anomalyScore = anomalyScore;
+		this.finalScore = finalScore;
+		this.modelVersion = modelVersion;
+		this.mode = mode;
+		this.topFeatures = topFeatures;
 		this.walletAddress = walletAddress;
 		this.userId = userId;
 		this.deviceId = deviceId;
@@ -87,6 +126,34 @@ public class LoginAssessment {
 
 	public Instant getAssessedAt() {
 		return assessedAt;
+	}
+
+	public String getFeatures() {
+		return features;
+	}
+
+	public Integer getRuleScore() {
+		return ruleScore;
+	}
+
+	public Double getAnomalyScore() {
+		return anomalyScore;
+	}
+
+	public Integer getFinalScore() {
+		return finalScore;
+	}
+
+	public Integer getModelVersion() {
+		return modelVersion;
+	}
+
+	public String getMode() {
+		return mode;
+	}
+
+	public String getTopFeatures() {
+		return topFeatures;
 	}
 
 }

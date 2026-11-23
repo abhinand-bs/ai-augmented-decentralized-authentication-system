@@ -21,7 +21,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 import com.blockauth.common.ErrorCode;
+import com.blockauth.config.AnomalySettings;
 import com.blockauth.config.SecuritySettings;
+import com.blockauth.risk.anomaly.AnomalyDetector;
+import com.blockauth.risk.anomaly.AnomalyTestSupport;
 import com.blockauth.risk.TrustPolicy.Decision;
 import com.blockauth.risk.TrustPolicy.Rule;
 
@@ -34,7 +37,9 @@ class TrustServiceTest {
 	private final LoginAssessmentRepository assessments = mock(LoginAssessmentRepository.class);
 	private final TrustService trust = new TrustService(jdbc, assessments,
 			new SecuritySettings(Base64.getEncoder().encodeToString(new byte[32]), 30, java.time.Duration.ofMinutes(10),
-					90, new SecuritySettings.Trust(90, 50, 30, 20, 35, 25, 3, 35, 3)),
+					90, new SecuritySettings.Trust(90, 50, 30, 20, 35, 25, 3, 35, 3, false)),
+			AnomalyTestSupport.settings(AnomalySettings.Mode.SHADOW), mock(AnomalyDetector.class),
+			tools.jackson.databind.json.JsonMapper.builder().build(),
 			Clock.fixed(Instant.parse("2026-10-15T00:00:00Z"), ZoneOffset.UTC));
 
 	@SuppressWarnings("unchecked")
@@ -47,7 +52,7 @@ class TrustServiceTest {
 	void withoutASecondStepAFailedCheckRefuses() {
 		databaseFails();
 
-		TrustService.Assessment assessment = trust.assess(UUID.randomUUID(), WALLET, null, "10.0.0.1", false);
+		TrustService.Assessment assessment = trust.assess(UUID.randomUUID(), WALLET, null, "10.0.0.1", "ua", false);
 
 		assertThat(assessment.decision()).isEqualTo(Decision.REFUSE);
 		assertThat(assessment.failure()).isEqualTo(ErrorCode.RISK_CHECK_UNAVAILABLE);
@@ -58,7 +63,7 @@ class TrustServiceTest {
 	void withASecondStepAFailedCheckAsksForTheCode() {
 		databaseFails();
 
-		TrustService.Assessment assessment = trust.assess(UUID.randomUUID(), WALLET, null, "10.0.0.1", true);
+		TrustService.Assessment assessment = trust.assess(UUID.randomUUID(), WALLET, null, "10.0.0.1", "ua", true);
 
 		assertThat(assessment.decision()).isEqualTo(Decision.SECOND_STEP);
 		ArgumentCaptor<LoginAssessment> recorded = ArgumentCaptor.forClass(LoginAssessment.class);

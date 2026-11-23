@@ -65,7 +65,11 @@ public record SecuritySettings(
 	 * Trust score policy. Every sign-in starts at 100 and loses the penalty of each rule that applies.
 	 * At or above {@code allowAt} the wallet signature is enough; at or above {@code secondStepAt} a
 	 * second step is asked for when one is set up; below that a second step is required and a wallet
-	 * without one is refused.
+	 * without one is refused. In other words a score from {@code secondStepAt} up to {@code allowAt - 1}
+	 * (50-89 by default) is let in on the signature alone when the wallet has no second step.
+	 * <p>
+	 * {@code networkPrefixMatch}: when true, a sign-in from the same IPv4 /24 or IPv6 /48 as an earlier
+	 * session counts as a known network; when false (the default) only the exact address does.
 	 */
 	public record Trust(
 			@DefaultValue("90") @Min(1) @Max(100) int allowAt,
@@ -76,7 +80,8 @@ public record SecuritySettings(
 			@DefaultValue("25") @Min(0) @Max(100) int repeatedFailuresPenalty,
 			@DefaultValue("3") @Min(1) @Max(100) int repeatedFailuresThreshold,
 			@DefaultValue("35") @Min(0) @Max(100) int linkedToFlaggedPenalty,
-			@DefaultValue("3") @Min(1) @Max(5) int graphDepth) {
+			@DefaultValue("3") @Min(1) @Max(5) int graphDepth,
+			@DefaultValue("false") boolean networkPrefixMatch) {
 
 		public Trust {
 			if (secondStepAt >= allowAt) {

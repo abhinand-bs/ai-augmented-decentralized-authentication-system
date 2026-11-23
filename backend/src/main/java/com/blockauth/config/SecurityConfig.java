@@ -82,7 +82,7 @@ public class SecurityConfig {
 				.requestMatchers(HttpMethod.GET, "/api/admin/users")
 					.hasAnyAuthority("ROLE_ADMIN", ApiScope.USERS_READ.authority())
 				.requestMatchers(HttpMethod.GET, "/api/admin/authentication-events", "/api/admin/security-events",
-						"/api/admin/statistics", "/api/admin/login-assessments")
+						"/api/admin/statistics", "/api/admin/login-assessments", "/api/admin/risk-model")
 					.hasAnyAuthority("ROLE_ADMIN", ApiScope.AUDIT_READ.authority())
 				.requestMatchers(HttpMethod.GET, "/api/blockchain/wallet/*", "/api/blockchain/verify/*")
 					.hasAnyAuthority("ROLE_ADMIN", ApiScope.WALLET_STATUS_READ.authority())

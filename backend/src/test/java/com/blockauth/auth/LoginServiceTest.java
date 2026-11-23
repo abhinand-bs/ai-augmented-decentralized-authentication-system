@@ -76,7 +76,7 @@ class LoginServiceTest {
 	}
 
 	private void trustSays(Decision decision) {
-		when(trust.assess(any(), eq(WALLET), any(), any(), anyBoolean()))
+		when(trust.assess(any(), eq(WALLET), any(), any(), any(), anyBoolean()))
 			.thenReturn(new TrustService.Assessment(decision == Decision.ALLOW ? 100 : 40, List.of(), decision,
 					ErrorCode.LOGIN_RISK_TOO_HIGH));
 	}

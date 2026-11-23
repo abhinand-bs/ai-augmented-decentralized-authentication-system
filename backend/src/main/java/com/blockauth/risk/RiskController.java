@@ -1,6 +1,7 @@
 package com.blockauth.risk;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.domain.Sort;
@@ -19,7 +20,9 @@ import com.blockauth.admin.AdminController.ProofBody;
 import com.blockauth.auth.StepUpProof;
 import com.blockauth.common.PageResponse;
 import com.blockauth.common.Specs;
+import com.blockauth.common.BlockAuthException;
 import com.blockauth.common.WalletAddresses;
+import com.blockauth.risk.anomaly.AnomalyDetector;
 import com.blockauth.security.BlockAuthPrincipal;
 import com.blockauth.security.ClientInfoResolver;
 
@@ -32,8 +35,13 @@ import jakarta.validation.constraints.NotNull;
 @RequestMapping("/api/admin")
 public class RiskController {
 
+	/**
+	 * {@code score} is the score the decision used (equal to {@code finalScore} for new rows). Model fields are
+	 * null for sign-ins assessed before the model existed, when it was off, or when it was unavailable.
+	 */
 	public record AssessmentView(Long id, String walletAddress, String ipAddress, int score, String rules,
-			TrustPolicy.Decision decision, Instant assessedAt) {
+			TrustPolicy.Decision decision, Instant assessedAt, Integer ruleScore, Double anomalyScore,
+			Integer finalScore, Integer modelVersion, String mode, List<String> topFeatures) {
 	}
 
 	public record FlagView(String walletAddress, String reason, UUID flaggedBy, Instant flaggedAt) {
@@ -45,21 +53,36 @@ public class RiskController {
 
 	private final LoginAssessmentRepository assessments;
 	private final WalletFlagService flags;
+	private final AnomalyDetector anomaly;
 
-	public RiskController(LoginAssessmentRepository assessments, WalletFlagService flags) {
+	public RiskController(LoginAssessmentRepository assessments, WalletFlagService flags, AnomalyDetector anomaly) {
 		this.assessments = assessments;
 		this.flags = flags;
+		this.anomaly = anomaly;
 	}
 
 	@GetMapping("/login-assessments")
 	PageResponse<AssessmentView> assessments(@RequestParam(required = false) String walletAddress,
-			@RequestParam(required = false) TrustPolicy.Decision decision, @RequestParam(defaultValue = "0") int page,
+			@RequestParam(required = false) TrustPolicy.Decision decision,
+			@RequestParam(required = false) Double minAnomaly, @RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size) {
 		String wallet = WalletAddresses.normalizeOptional(walletAddress, "walletAddress");
+		if (minAnomaly != null && !(minAnomaly >= 0 && minAnomaly <= 1)) {
+			throw BlockAuthException.invalid("minAnomaly", "must be between 0 and 1");
+		}
 		return PageResponse.of(assessments.findAll(Specs.<LoginAssessment>eq("walletAddress", wallet)
-			.and(Specs.eq("decision", decision)), PageResponse.request(page, size, "assessedAt")), a -> new AssessmentView(
+			.and(Specs.eq("decision", decision)).and(Specs.atLeast("anomalyScore", minAnomaly)),
+				PageResponse.request(page, size, "assessedAt")), a -> new AssessmentView(
 					a.getId(), WalletAddresses.checksum(a.getWalletAddress()), a.getIpAddress(), a.getScore(),
-					a.getRules(), a.getDecision(), a.getAssessedAt()));
+					a.getRules(), a.getDecision(), a.getAssessedAt(), a.getRuleScore(), a.getAnomalyScore(),
+					a.getFinalScore(), a.getModelVersion(), a.getMode(),
+					a.getTopFeatures() == null ? List.of() : List.of(a.getTopFeatures().split(","))));
+	}
+
+	/** Read-only state of the anomaly model. Nothing here, or anywhere in the API, changes or retrains it. */
+	@GetMapping("/risk-model")
+	AnomalyDetector.Status riskModel() {
+		return anomaly.status();
 	}
 
 	@GetMapping("/wallet-flags")

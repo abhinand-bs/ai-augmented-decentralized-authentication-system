@@ -1,12 +1,12 @@
 package com.blockauth.session;
 
 /** "Chrome on Windows" from a User-Agent header. Only for display: the header is chosen by the client. */
-final class DeviceLabels {
+public final class DeviceLabels {
 
 	private DeviceLabels() {
 	}
 
-	static String of(String userAgent) {
+	public static String of(String userAgent) {
 		if (userAgent == null || userAgent.isBlank()) {
 			return "Unknown browser";
 		}

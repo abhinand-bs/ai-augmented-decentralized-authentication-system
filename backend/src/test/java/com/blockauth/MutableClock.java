@@ -24,6 +24,11 @@ public final class MutableClock extends Clock {
 		offset = offset.plus(amount);
 	}
 
+	/** Moves this clock so that it reads {@code at} now (and keeps running from there). */
+	public void set(Instant at) {
+		offset = Duration.between(fixedStart != null ? fixedStart : Instant.now(), at);
+	}
+
 	public void reset() {
 		offset = Duration.ZERO;
 	}

@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class SecuritySettingsTest {
 
-	private static final SecuritySettings.Trust TRUST = new SecuritySettings.Trust(90, 50, 30, 20, 35, 25, 3, 35, 3);
+	private static final SecuritySettings.Trust TRUST = new SecuritySettings.Trust(90, 50, 30, 20, 35, 25, 3, 35, 3, false);
 	private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
 
 	private static SecuritySettings with(String key, Duration delay) {
@@ -43,7 +43,7 @@ class SecuritySettingsTest {
 
 	@Test
 	void theSecondStepThresholdMustBeBelowTheAllowThreshold() {
-		assertThatThrownBy(() -> new SecuritySettings.Trust(50, 50, 30, 20, 35, 25, 3, 35, 3))
+		assertThatThrownBy(() -> new SecuritySettings.Trust(50, 50, 30, 20, 35, 25, 3, 35, 3, false))
 			.isInstanceOf(IllegalArgumentException.class);
 	}
 

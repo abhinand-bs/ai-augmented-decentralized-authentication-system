@@ -13,7 +13,9 @@ import com.blockauth.config.SecuritySettings;
 public final class TrustPolicy {
 
 	public enum Rule {
-		NEW_DEVICE, NEW_NETWORK, FLAGGED_WALLET, REPEATED_FAILURES, LINKED_TO_FLAGGED, CHECK_UNAVAILABLE
+		NEW_DEVICE, NEW_NETWORK, FLAGGED_WALLET, REPEATED_FAILURES, LINKED_TO_FLAGGED, CHECK_UNAVAILABLE,
+		/** The learned anomaly model found the sign-in unusual and (in ENFORCE mode) lowered the score. */
+		ANOMALY_DETECTED
 	}
 
 	public enum Decision {
@@ -64,6 +66,28 @@ public final class TrustPolicy {
 			penalty += settings.linkedToFlaggedPenalty();
 		}
 		return new Score(Math.max(0, 100 - penalty), List.copyOf(rules));
+	}
+
+	/**
+	 * Lowers a rule score by the anomaly penalty {@code round(maxPenalty * clamp((a - t) / (1 - t)))}. The
+	 * anomaly can only lower a score, never raise it, and the thresholds of {@link #decide} stay as they are.
+	 */
+	public static Score withAnomaly(Score rules, double anomaly, double threshold, int maxPenalty) {
+		int penalty = anomalyPenalty(anomaly, threshold, maxPenalty);
+		if (penalty == 0) {
+			return rules;
+		}
+		List<Rule> withRule = new ArrayList<>(rules.rules());
+		withRule.add(Rule.ANOMALY_DETECTED);
+		return new Score(Math.max(0, rules.value() - penalty), List.copyOf(withRule));
+	}
+
+	static int anomalyPenalty(double anomaly, double threshold, int maxPenalty) {
+		if (!Double.isFinite(anomaly)) {
+			return 0;
+		}
+		double scaled = Math.max(0, Math.min(1, (anomaly - threshold) / (1 - threshold)));
+		return (int) Math.round(maxPenalty * scaled);
 	}
 
 	/**

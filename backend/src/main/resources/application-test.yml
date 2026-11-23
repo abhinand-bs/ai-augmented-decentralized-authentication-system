@@ -25,6 +25,13 @@ blockauth:
   security:
     trusted-device-days: 30
     admin-action-delay: 10m
+    # Pinned so a developer's .env.local cannot change what the tests assert.
+    trust:
+      network-prefix-match: false
+    anomaly:
+      mode: shadow
+      # Trained by the tests themselves when they need it.
+      training-schedule: "-"
   # Due administrator actions are carried out by the tests themselves, never by the background job.
   admin-actions:
     schedule: "-"
