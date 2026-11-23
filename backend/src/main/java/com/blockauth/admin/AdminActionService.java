@@ -58,7 +58,7 @@ public class AdminActionService {
 
 	private static final Logger log = LoggerFactory.getLogger(AdminActionService.class);
 	private static final Duration RETRY_AFTER = Duration.ofMinutes(1);
-	private static final Set<ErrorCode> TEMPORARY = Set.of(ErrorCode.BLOCKCHAIN_UNAVAILABLE,
+	private static final Set<ErrorCode> TEMPORARY = Set.of(ErrorCode.BLOCKCHAIN_UNAVAILABLE, ErrorCode.BLOCKCHAIN_BUSY,
 			ErrorCode.BLOCKCHAIN_TIMEOUT, ErrorCode.DATABASE_UNAVAILABLE, ErrorCode.CHAIN_DELAY_PENDING);
 
 	private final AdminActionRepository actions;

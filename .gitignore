@@ -20,7 +20,9 @@ coverage/
 # Hardhat: compiled artifacts and per-machine deployment records
 contracts/artifacts/
 contracts/cache/
-contracts/deployments/
+contracts/deployments/*
+# The public Sepolia record is kept (addresses and hashes only).
+!contracts/deployments/sepolia.json
 
 # Maven wrapper download
 .mvn/wrapper/maven-wrapper.jar

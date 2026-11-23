@@ -70,6 +70,10 @@ public class BlockchainStartupVerifier implements SmartInitializingSingleton {
 		}
 		log.info("Blockchain verified: chain {}, WalletRegistry deployed, operator matches, guardian {}, delay {}",
 				chainId, registry.contractGuardian(), delay);
+		if (registry.operatorBalanceLow()) {
+			log.warn("The operator account's balance is low ({} wei): registrations and revocations will fail once "
+					+ "it cannot pay for gas. Fund the operator account.", registry.operatorBalanceWei());
+		}
 	}
 
 }

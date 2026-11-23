@@ -21,6 +21,12 @@ spring:
   jackson:
     deserialization:
       fail-on-unknown-properties: true
+  task:
+    scheduling:
+      pool:
+        # Several background jobs (delayed actions, chain checks, cleanup, model training). With Spring's
+        # default of one thread, one slow chain call would hold up all the others.
+        size: ${SCHEDULER_POOL_SIZE:4}
   servlet:
     multipart:
       # The API has no file uploads. Left enabled, the container would read multipart bodies of
@@ -71,7 +77,43 @@ blockauth:
     chain-id: ${BLOCKCHAIN_CHAIN_ID}
     contract-address: ${CONTRACT_ADDRESS}
     operator-private-key: ${BLOCKCHAIN_OPERATOR_PRIVATE_KEY}
+    # How registry transactions are sent. Local defaults; see docs/SEPOLIA.md for a public test network.
+    tx:
+      receipt-timeout: ${BLOCKCHAIN_RECEIPT_TIMEOUT:30s}
+      confirmations: ${BLOCKCHAIN_CONFIRMATIONS:1}
+      lock-wait: ${BLOCKCHAIN_LOCK_WAIT:10s}
+      gas-limit-cap: ${BLOCKCHAIN_GAS_LIMIT_CAP:200000}
+      max-fee-gwei: ${BLOCKCHAIN_MAX_FEE_GWEI:200}
+      low-balance-eth: ${BLOCKCHAIN_LOW_BALANCE_ETH:0.05}
+  # Optional retention of sign-in assessments and audit events, in days. 0 keeps everything (the default).
+  retention:
+    days: ${RETENTION_DAYS:0}
+  # How often the chain is read for status changes and unexpected requests (one RPC per signed-in wallet per
+  # run). Every 15 s locally; use "0 * * * * *" (every minute) on a free public RPC tier.
+  chain-sync:
+    schedule: "${CHAIN_SYNC_SCHEDULE:*/15 * * * * *}"
   security:
     second-step-key: ${SECOND_STEP_ENCRYPTION_KEY}
     trusted-device-days: ${TRUSTED_DEVICE_DAYS:30}
     admin-action-delay: ${ADMIN_ACTION_DELAY:10m}
+    api-key-max-days: ${API_KEY_MAX_DAYS:90}
+    # Trust-score rules (see .env.example for what each one means).
+    trust:
+      allow-at: ${TRUST_ALLOW_AT:90}
+      second-step-at: ${TRUST_SECOND_STEP_AT:50}
+      new-device-penalty: ${TRUST_NEW_DEVICE_PENALTY:30}
+      new-network-penalty: ${TRUST_NEW_NETWORK_PENALTY:20}
+      flagged-wallet-penalty: ${TRUST_FLAGGED_WALLET_PENALTY:35}
+      repeated-failures-penalty: ${TRUST_REPEATED_FAILURES_PENALTY:25}
+      repeated-failures-threshold: ${TRUST_REPEATED_FAILURES_THRESHOLD:3}
+      linked-to-flagged-penalty: ${TRUST_LINKED_TO_FLAGGED_PENALTY:35}
+      graph-depth: ${TRUST_GRAPH_DEPTH:3}
+      network-prefix-match: ${TRUST_NETWORK_PREFIX_MATCH:false}
+    # Learned anomaly model beside the rules: off, shadow (stored and shown only) or enforce.
+    anomaly:
+      mode: ${ANOMALY_MODE:shadow}
+      threshold: ${ANOMALY_THRESHOLD:0.6}
+      max-penalty: ${ANOMALY_MAX_PENALTY:30}
+      min-real-samples: ${ANOMALY_MIN_REAL_SAMPLES:200}
+      per-wallet-cap: ${ANOMALY_PER_WALLET_CAP:50}
+      training-schedule: "${ANOMALY_TRAINING_SCHEDULE:0 30 3 * * *}"

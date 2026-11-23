@@ -337,7 +337,7 @@ class WalletRegistryClientIT {
 		byte[] key = new byte[32];
 		new java.security.SecureRandom().nextBytes(key);
 		SecuritySettings settings = new SecuritySettings(java.util.Base64.getEncoder().encodeToString(key), 30,
-				adminActionDelay, 90, new SecuritySettings.Trust(90, 50, 30, 20, 35, 25, 3, 35, 3));
+				adminActionDelay, 90, new SecuritySettings.Trust(90, 50, 30, 20, 35, 25, 3, 35, 3, false));
 		return new BlockchainStartupVerifier(clientFor(blockchain, Duration.ofSeconds(5)),
 				new BlockAuthProperties("http://localhost:5173", 120, List.of(), blockchain), settings);
 	}

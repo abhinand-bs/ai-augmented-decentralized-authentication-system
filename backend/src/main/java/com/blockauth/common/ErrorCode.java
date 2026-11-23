@@ -51,6 +51,7 @@ public enum ErrorCode {
 	INTERNAL_ERROR(500, Level.ERROR, "An unexpected error occurred."),
 	BLOCKCHAIN_TX_FAILED(502, Level.ERROR, "Blockchain transaction failed."),
 	BLOCKCHAIN_UNAVAILABLE(503, Level.ERROR, "Blockchain service is unavailable."),
+	BLOCKCHAIN_BUSY(503, Level.WARN, "Another blockchain change is in progress. Try again shortly."),
 	DATABASE_UNAVAILABLE(503, Level.ERROR, "Service temporarily unavailable."),
 	RISK_CHECK_UNAVAILABLE(503, Level.ERROR, "Sign-in checks are temporarily unavailable."),
 	EMERGENCY_STOP_ACTIVE(503, Level.WARN, "This is paused by an administrator."),

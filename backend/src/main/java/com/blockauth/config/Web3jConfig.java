@@ -2,10 +2,13 @@ package com.blockauth.config;
 
 import java.time.Duration;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.http.HttpService;
+
+import com.blockauth.blockchain.ChainWriteLock;
 
 import okhttp3.OkHttpClient;
 
@@ -19,6 +22,13 @@ public class Web3jConfig {
 		OkHttpClient client = new OkHttpClient.Builder().connectTimeout(RPC_TIMEOUT).readTimeout(RPC_TIMEOUT)
 				.writeTimeout(RPC_TIMEOUT).build();
 		return Web3j.build(new HttpService(properties.blockchain().rpcUrl(), client));
+	}
+
+	/** One instance: the chain client's own lock serializes its writes. With Redis, a shared lease replaces this. */
+	@Bean
+	@ConditionalOnMissingBean
+	ChainWriteLock chainWriteLock() {
+		return ChainWriteLock.NONE;
 	}
 
 }
