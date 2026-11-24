@@ -119,7 +119,7 @@ class ApiKeyIT extends IntegrationTest {
 		Api.Response response = withKey(key, "/api/admin/users");
 
 		assertThat(response.status()).isEqualTo(200);
-		assertThat(response.setCookies()).noneMatch(c -> c.startsWith("JSESSIONID="));
+		assertThat(response.setCookies()).noneMatch(c -> c.startsWith("BLOCKAUTH_SESSION=")); // was JSESSIONID: never the name here (A-37)
 		assertThat(jdbc.queryForObject("select last_used_at is not null from api_keys", Boolean.class)).isTrue();
 	}
 

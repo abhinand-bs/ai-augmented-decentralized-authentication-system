@@ -21,9 +21,10 @@ spring:
       connect-timeout: 2s
   session:
     timeout: ${SESSION_TIMEOUT:30m}
-    redis:
-      namespace: "blockauth:session"
-      flush-mode: on-save
+    data:
+      redis: # Boot 4 name; the old spring.session.redis.* is no longer read (audit A-36)
+        namespace: "blockauth:session"
+        flush-mode: on-save
 
 blockauth:
   redis:

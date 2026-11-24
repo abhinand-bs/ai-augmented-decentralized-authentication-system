@@ -109,3 +109,23 @@ Running local services started by this session: containers `blockauth-it-pg` (55
 | Two instances | `parallel_regs.mjs` ×3 without / with Redis | 59/60 with 9 nonce retries / 60/60 with 0 (A-32) |
 | Clean clone | `clean_clone.sh` | contracts OK; frontend coverage below floor (A-31, fixed with tests); backend: see VERIFICATION.md |
 | Frontend | screenshots at four widths | reviewed; e-mail field unstyled, fixed |
+
+## 5. Live test session (2026-11-23 23:40 to 2026-11-24 03:45 IST)
+
+Full report: `BLOCKAUTH_LIVE_TEST_REPORT.md`. Stack: two backend jars (8080, 18081, redis profile) on the Neon **test**
+branch, Redis 7.4 on 127.0.0.1:6380, Hardhat 31337, Mailpit, Vite 5173/5174, Playwright `live` project.
+
+| Step | Result |
+|---|---|
+| Live run 1 | hung at S12: A-34 (ended session refused on public sign-in endpoints); fixed in `ActiveUserFilter` |
+| Logout race (`logout_race.mjs`) | 500 in 2 of 8 rounds: A-35; fixed with `TolerantRedisSessions`; 20/20 after |
+| Redis keys | `spring:session:*` instead of `blockauth:session:*`: A-36 (Boot 4 property rename); fixed |
+| Live run 2 | API key refused on its own scope: A-37 (API-key auth saved in a session; not serializable with Redis); fixed in `SecurityConfig`; `ApiKeyIT` checked the wrong cookie name, corrected |
+| Risk table | Decision column out of view at 1366 px: A-38; columns reordered |
+| Live runs 3, 4 | stopped by the test itself (re-registering the admin, reused client addresses), both counted correctly as repeated failures; the test was corrected |
+| Live run 5 + `lift`, `pages`, `enforce` phases | all passed; DB, admin API and screens agree (report section 3) |
+| Regression tests | each new test fails without its fix (shown by running with the fix set aside) |
+| Backend `verify` (local PG, Redis group) | 216 unit + 222 IT, 0 failures |
+| Frontend | Vitest 88/88, mocked UI e2e 19/19, ESLint clean |
+| Open | A-33 (young-wallet anomaly bias), A-39 (each instance trains its own nightly model) |
+| Not done | Sepolia BLOCKED (not configured); GitHub CI and a real MetaMask NOT VERIFIED; nothing committed |

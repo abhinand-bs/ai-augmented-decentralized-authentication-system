@@ -83,6 +83,12 @@ public class ActiveUserFilter extends OncePerRequestFilter {
 							principal.walletAddress(), user == null ? null : user.getId(), null, null,
 							ClientInfoResolver.resolve(request));
 				}
+				// Signing in again is exactly what a browser with an ended session should do: the stale session is gone
+				// now, so a public sign-in request goes on as an anonymous one instead of failing once.
+				if (isPublicSignIn(request)) {
+					chain.doFilter(request, response);
+					return;
+				}
 				errors.write(request, response, ErrorCode.SESSION_REVOKED);
 				return;
 			}
@@ -91,6 +97,15 @@ public class ActiveUserFilter extends OncePerRequestFilter {
 					principal.sessionId()));
 		}
 		chain.doFilter(request, response);
+	}
+
+	/** The endpoints anyone may call to sign in (see SecurityConfig); every other request needs a live session. */
+	private static final java.util.Set<String> PUBLIC_SIGN_IN = java.util.Set.of("/api/auth/csrf",
+			"/api/auth/register/challenge", "/api/auth/register", "/api/auth/challenge", "/api/auth/verify",
+			"/api/auth/second-step", "/api/auth/logout");
+
+	private static boolean isPublicSignIn(HttpServletRequest request) {
+		return PUBLIC_SIGN_IN.contains(RateLimitFilter.routedPath(request));
 	}
 
 	private void touch(SessionAndUser found, BlockAuthPrincipal principal) {

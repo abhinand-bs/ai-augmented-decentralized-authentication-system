@@ -16,6 +16,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.blockauth.config.SecuritySettings;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import com.blockauth.secondstep.SecondStepTestSupport;
 
 /**
@@ -29,6 +30,9 @@ class RedisMultiInstanceIT extends IntegrationTest {
 
 	@Autowired
 	private SecuritySettings settings;
+
+	@Autowired
+	private StringRedisTemplate redis;
 
 	private final List<ConfigurableApplicationContext> started = new ArrayList<>();
 
@@ -146,6 +150,45 @@ class RedisMultiInstanceIT extends IntegrationTest {
 		}
 		// The in-memory fallback still limits: never a moment without limits.
 		assertThat(statuses).contains(429);
+	}
+
+	/**
+	 * Finding A-35 (live test): a request still running during a logout can leave a half-written session in Redis.
+	 * Such a session must count as no session (401), never as a server error (500), and must not block a new
+	 * sign-in.
+	 */
+	@Test
+	void aHalfWrittenSessionCountsAsNoSession() {
+		TestWallet wallet = new TestWallet();
+		Api api = registeredAndLoggedIn(wallet);
+		String id = new String(java.util.Base64.getDecoder().decode(api.cookies.get("BLOCKAUTH_SESSION")),
+				java.nio.charset.StandardCharsets.UTF_8);
+		String key = "blockauth:session:sessions:" + id;
+		assertThat(redis.hasKey(key)).isTrue();
+		redis.opsForHash().delete(key, "creationTime");
+
+		Api.Response me = api.get("/api/users/me");
+
+		assertThat(me.status()).as(me.body().toString()).isEqualTo(401);
+		assertThat(redis.hasKey(key)).isFalse();
+		rateLimiter.clear();
+		assertThat(login(api, wallet).status()).isEqualTo(200);
+	}
+
+	/** Found in the live test (A-37): with Redis sessions an API-key request failed (403 after a 500). */
+	@Test
+	void anApiKeyWorksWithRedisSessionsAndOpensNoSession() {
+		Api admin = registeredAndLoggedIn(ADMIN);
+		Map<String, Object> parameters = Map.of("name", "Monitor", "scopes", List.of("audit:read"), "days", 1);
+		Map<String, Object> body = new java.util.LinkedHashMap<>(proof(admin, ADMIN, "CREATE_API_KEY", parameters));
+		body.putAll(parameters);
+		String token = admin.post("/api/admin/api-keys", body).body().get("token").asString();
+
+		Api.Response read = browser().send("GET", "/api/admin/statistics", null,
+				Map.of(com.blockauth.apikey.ApiKeyFilter.HEADER, token), false);
+
+		assertThat(read.status()).isEqualTo(200);
+		assertThat(read.setCookies()).noneMatch(c -> c.startsWith("BLOCKAUTH_SESSION="));
 	}
 
 }

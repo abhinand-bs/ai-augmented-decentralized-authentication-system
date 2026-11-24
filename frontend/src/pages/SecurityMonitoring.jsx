@@ -250,6 +250,17 @@ function SignInRisk() {
           },
           { key: 'score', header: 'Final', render: (row) => <span className="mono">{row.finalScore ?? row.score}</span> },
           {
+            key: 'decision',
+            header: 'Decision',
+            render: (row) => <StatusBadge value={row.decision} kind={DECISION_KIND[row.decision]} />,
+          },
+          {
+            key: 'rules',
+            header: 'Why',
+            wrap: true,
+            render: (row) => (row.rules ? row.rules.split(',').map(label).join(', ') : 'Nothing unusual'),
+          },
+          {
             key: 'topFeatures',
             header: 'Unusual in',
             wrap: true,
@@ -259,17 +270,6 @@ function SignInRisk() {
             key: 'modelVersion',
             header: 'Model',
             render: (row) => (row.modelVersion ? <span className="mono">v{row.modelVersion} {label(row.mode)}</span> : '—'),
-          },
-          {
-            key: 'rules',
-            header: 'Why',
-            wrap: true,
-            render: (row) => (row.rules ? row.rules.split(',').map(label).join(', ') : 'Nothing unusual'),
-          },
-          {
-            key: 'decision',
-            header: 'Decision',
-            render: (row) => <StatusBadge value={row.decision} kind={DECISION_KIND[row.decision]} />,
           },
         ]}
       />

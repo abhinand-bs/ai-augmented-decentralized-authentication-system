@@ -22,6 +22,9 @@ import org.springframework.security.web.firewall.RequestRejectedHandler;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 
 import com.blockauth.apikey.ApiKeyFilter;
+import org.springframework.security.core.context.SecurityContext;
+import com.blockauth.apikey.ApiKeyPrincipal;
+import jakarta.servlet.http.HttpServletResponse;
 import com.blockauth.apikey.ApiKeyService;
 import com.blockauth.apikey.ApiScope;
 import com.blockauth.audit.AuditService;
@@ -40,10 +43,22 @@ import jakarta.servlet.http.HttpServletRequest;
 @Configuration
 public class SecurityConfig {
 
-	/** The authenticated principal lives in the server-side session, nowhere else. */
+	/**
+	 * The authenticated principal lives in the server-side session, nowhere else. An API key's authentication
+	 * is for its one request: the framework's session-management step would otherwise store it in a new
+	 * session (one per call, and with Redis a failure, as the principal is not serializable: audit A-37).
+	 */
 	@Bean
 	SecurityContextRepository securityContextRepository() {
-		return new HttpSessionSecurityContextRepository();
+		return new HttpSessionSecurityContextRepository() {
+			@Override
+			public void saveContext(SecurityContext context, HttpServletRequest request, HttpServletResponse response) {
+				if (context.getAuthentication() == null
+						|| !(context.getAuthentication().getPrincipal() instanceof ApiKeyPrincipal)) {
+					super.saveContext(context, request, response);
+				}
+			}
+		};
 	}
 
 	/** Readable by the SPA (not HttpOnly) so it can echo the token in X-XSRF-TOKEN. */

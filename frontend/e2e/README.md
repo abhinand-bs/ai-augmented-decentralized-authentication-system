@@ -30,3 +30,25 @@ The test runs five sign-in challenges from 127.0.0.1. The backend allows ten a m
 most twice a minute; it ends with one deliberately refused sign-in, and from the third failure within an hour
 the trust score counts "repeated failures" for that address. Use a fresh database for repeated runs, or keep the
 administrator's device file in `e2e/.state/` (the test does this for you).
+
+## Live run against the real stack: `E2E_LIVE=1 npx playwright test`
+
+`live.spec.js` drives every risk scenario and the admin features against real services; results go to
+`live-results/live-results.jsonl`, screenshots to `../BlockAuth-Live-Test-Screenshots/`. It needs:
+
+- backend A on 8080 and backend B on 18081, both with the `redis` profile, the same Redis and the **test** database
+  (never the main one), mail to Mailpit (127.0.0.1:1025, web 8025), `TRUSTED_PROXIES=127.0.0.1/32, ::1/128`,
+  `SERVER_FORWARD_HEADERS_STRATEGY=native`, `ADMIN_ACTION_DELAY=10m` and the e2e admin wallet above;
+- the dev server on 5173 → 8080 and a second one on 5174 → 18081
+  (PowerShell: `$env:BACKEND_URL='http://localhost:18081'; npx vite --port 5174`;
+  Bash: `BACKEND_URL=http://localhost:18081 npx vite --port 5174`);
+- a Hardhat node with the contract deployed.
+
+Run it (PowerShell): `$env:E2E_LIVE='1'; npx playwright test`; add `$env:LIVE_PHASE='lift'` etc. for the other phases.
+Bash: `E2E_LIVE=1 LIVE_PHASE=lift npx playwright test`.
+
+Phases (`LIVE_PHASE`): `main` (default; ends with the emergency stop on and its lift requested), `lift` (after the
+delay: checks the lift was carried out, removes leftover live-test flags), `pages` (remaining routes and guards),
+`enforce` (backend A restarted with `ANOMALY_MODE=enforce ANOMALY_THRESHOLD=0.5`). Client networks are simulated
+with `X-Forwarded-For` from the documentation ranges, with a different last octet each run, because failures count
+per address for an hour.

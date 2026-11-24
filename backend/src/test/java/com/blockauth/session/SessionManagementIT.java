@@ -143,4 +143,26 @@ class SessionManagementIT extends IntegrationTest {
 		assertThat(count("select count(*) from user_sessions where end_reason = 'RESTART'")).isEqualTo(1);
 	}
 
+	/**
+	 * Found in the live test (finding A-34): a browser whose session was ended elsewhere must be able to sign in
+	 * again at once. Protected endpoints still refuse the ended session.
+	 */
+	@Test
+	void aBrowserWhoseSessionWasEndedElsewhereCanSignInAgainAtOnce() {
+		Api laptop = registeredAndLoggedIn(wallet);
+		Api phone = secondDevice();
+		assertThat(laptop.post("/api/users/sessions/end-others", null).status()).isEqualTo(200);
+
+		Api.Response challenge = phone.post("/api/auth/challenge", java.util.Map.of("walletAddress",
+				wallet.checksumAddress()));
+
+		assertThat(challenge.status()).as(challenge.body().toString()).isEqualTo(201);
+		assertThat(login(phone, wallet).status()).isEqualTo(200);
+		assertThat(phone.get("/api/users/me").status()).isEqualTo(200);
+		rateLimiter.clear(); // setup only: one more sign-in for the same wallet would pass the per-minute limit
+		Api other = secondDevice();
+		assertThat(laptop.post("/api/users/sessions/end-others", null).status()).isEqualTo(200);
+		assertThat(other.get("/api/users/me").code()).isEqualTo("SESSION_REVOKED");
+	}
+
 }

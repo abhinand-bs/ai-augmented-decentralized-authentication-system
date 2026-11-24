@@ -1,5 +1,6 @@
 coverage/
 playwright-report/
 test-results/
+live-results/
 e2e-screenshots/
 e2e/.state/
