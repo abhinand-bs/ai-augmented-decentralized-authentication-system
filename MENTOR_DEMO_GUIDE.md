@@ -192,7 +192,11 @@ A fresh Hardhat chain is empty, but the test database still remembers old regist
 
 ```sql
 TRUNCATE users, devices RESTART IDENTITY CASCADE;
+UPDATE emergency_stop SET active = false, block_logins = false;
 ```
+
+The second line switches off an emergency stop that a previous demo may have left on: otherwise registration would be
+refused and no administrator could be registered to lift it. A fresh blockchain is never paused, so both now agree.
 
 This deletes every user, session, device, event, risk assessment, flag, API key and alert e-mail **on the test branch**. It keeps the
 trained risk model and the emergency-stop setting. (This command was checked on the test branch inside a transaction that was then

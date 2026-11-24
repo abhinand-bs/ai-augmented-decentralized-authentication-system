@@ -499,14 +499,16 @@ test('pages: every remaining route as a signed-in user, the admin guard and unkn
   expect(forbidden.status()).toBe(403);
   // Session re-check (new): a session ended from another device is noticed when this tab gets focus again
   // (at most every 30 s), without any click here.
+  await page.goto('/dashboard'); // last check happens now; the page then stays loaded, untouched
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   const second = await device(browser, user, IP.home, 'pages-second');
   await signIn(second);
   await expect(second.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await second.goto('/security');
   await second.getByRole('button', { name: 'Sign out everywhere else' }).click();
   await expect(second.getByRole('region', { name: 'Signed-in sessions' }).locator('tbody tr')).toHaveCount(1);
-  await page.goto('/dashboard');
-  await page.waitForTimeout(31_000);
+  await page.waitForTimeout(31_000); // past the 30-second re-check interval
+  await expect(page).toHaveURL(/\/dashboard/); // still there: nothing but the focus event may send it away
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
   record('session re-check on focus', { endedElsewhere: true, redirectedTo: '/login' });
